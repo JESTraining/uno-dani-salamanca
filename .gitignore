@@ -1,0 +1,27 @@
+# Build artifacts
+bin/
+obj/
+out/
+TestResults/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# EF Core
+*.db
+
+# Node / Angular (Frontend, Fase 4)
+node_modules/
+dist/
+.angular/
+
+# Environment files with local secrets
+.env
+*.env.local
+
+
+plan/

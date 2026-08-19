@@ -1,0 +1,223 @@
+{
+  "info": {
+    "name": "Order Service",
+    "description": "Coleccion de la API REST del Order Service (Fase 1).\n\nRequisitos antes de usarla:\n- Contenedores Docker `orders-postgres` y `orders-rabbitmq` corriendo.\n- API levantada: `cd src/OrderService/OrderService.API && dotnet run --launch-profile http` (queda en http://localhost:5290).\n\nAviso: el Inventory Service todavia no existe (llega en la Fase 2). Toda creacion de pedido (`POST /api/orders`) responde 503 Service Unavailable hasta entonces, porque el Order Service valida el stock contra ese servicio antes de crear el pedido. Es el comportamiento esperado, no un error.\n\nVariables de coleccion: `baseUrl` (URL de la API) y `orderId` (se completa automaticamente al ejecutar 'Crear Pedido' con una respuesta exitosa, para encadenar el resto de las peticiones sin copiar el id a mano).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5290", "type": "string" },
+    { "key": "orderId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Crear Pedido",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}",
+            "description": "Clave que identifica el intento de creacion. Si se repite la misma peticion con la misma clave, se devuelve el pedido ya creado en vez de duplicarlo. Postman genera una clave nueva en cada envio via {{$guid}}; fijar un valor manual para probar la idempotencia enviando la misma peticion dos veces."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/orders",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "orders" ]
+        },
+        "description": "Crea un nuevo pedido. Valida disponibilidad de stock contra el Inventory Service antes de crear el pedido (por eso responde 503 mientras ese servicio no exista).\n\nReglas de negocio aplicadas:\n- Se requiere al menos un articulo en 'items'.\n- El monto total (suma de quantity * unitPrice de todos los items) debe ser mayor que 0.\n- customerEmail debe tener formato de correo valido.\n\nRespuesta exitosa: 201 Created, con el pedido creado en estado 'Pending' y el header 'Location' apuntando a GET /api/orders/{id}.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerId\": \"{{$guid}}\",\n  \"customerName\": \"Jane Doe\",\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"items\": [\n    {\n      \"productId\": \"{{$guid}}\",\n      \"productName\": \"Widget\",\n      \"quantity\": 2,\n      \"unitPrice\": 9.99\n    }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('orderId', body.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "201 Created",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/orders" } },
+          "status": "Created",
+          "code": 201,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"customerId\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n  \"customerName\": \"Jane Doe\",\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"status\": \"Pending\",\n  \"totalAmount\": 19.98,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:00Z\",\n  \"items\": [\n    {\n      \"id\": \"b2c3d4e5-0000-0000-0000-000000000002\",\n      \"productId\": \"c3d4e5f6-0000-0000-0000-000000000003\",\n      \"productName\": \"Widget\",\n      \"quantity\": 2,\n      \"unitPrice\": 9.99,\n      \"subtotal\": 19.98\n    }\n  ]\n}"
+        },
+        {
+          "name": "503 Service Unavailable (Inventory Service no existe todavia)",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/orders" } },
+          "status": "Service Unavailable",
+          "code": 503,
+          "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
+          "body": "{\n  \"status\": 503,\n  \"title\": \"Inventory Service is unreachable.\"\n}"
+        },
+        {
+          "name": "400 Bad Request (sin items)",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/orders" } },
+          "status": "Bad Request",
+          "code": 400,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"title\": \"One or more validation errors occurred.\",\n  \"status\": 400,\n  \"errors\": {\n    \"Items\": [ \"The field Items must be a string or array type with a minimum length of '1'.\" ]\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Obtener Pedido por Id",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/orders/{{orderId}}",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "orders", "{{orderId}}" ]
+        },
+        "description": "Devuelve el detalle de un pedido, incluyendo sus articulos.\n\nUsa la variable de coleccion {{orderId}}, que se completa automaticamente al ejecutar 'Crear Pedido' con una respuesta 201. Tambien se puede reemplazar a mano por cualquier id existente."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"customerId\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n  \"customerName\": \"Jane Doe\",\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"status\": \"Pending\",\n  \"totalAmount\": 19.98,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:00Z\",\n  \"items\": [\n    {\n      \"id\": \"b2c3d4e5-0000-0000-0000-000000000002\",\n      \"productId\": \"c3d4e5f6-0000-0000-0000-000000000003\",\n      \"productName\": \"Widget\",\n      \"quantity\": 2,\n      \"unitPrice\": 9.99,\n      \"subtotal\": 19.98\n    }\n  ]\n}"
+        },
+        {
+          "name": "404 Not Found",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "status": "Not Found",
+          "code": 404,
+          "header": [],
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "Listar Pedidos",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/orders?page=1&pageSize=20&status=&dateFrom=&dateTo=&customerId=",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "orders" ],
+          "query": [
+            { "key": "page", "value": "1", "description": "Numero de pagina, base 1." },
+            { "key": "pageSize", "value": "20", "description": "Tamano de pagina (se limita internamente entre 1 y 100)." },
+            { "key": "status", "value": "", "disabled": true, "description": "Filtra por estado exacto. Valores validos: Pending, PaymentProcessing, PaymentFailed, InventoryProcessing, InventoryFailed, Completed, Cancelled, Shipped, Delivered." },
+            { "key": "dateFrom", "value": "", "disabled": true, "description": "Fecha minima de creacion, formato ISO 8601 (ej. 2026-08-01T00:00:00Z)." },
+            { "key": "dateTo", "value": "", "disabled": true, "description": "Fecha maxima de creacion, formato ISO 8601." },
+            { "key": "customerId", "value": "", "disabled": true, "description": "Filtra por id de cliente exacto (GUID)." }
+          ]
+        },
+        "description": "Lista pedidos con paginacion y filtros opcionales por estado, rango de fechas y cliente. Los filtros deshabilitados en esta peticion se activan tildando la casilla junto a cada uno."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/orders?page=1&pageSize=20" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"items\": [],\n  \"page\": 1,\n  \"pageSize\": 20,\n  \"totalCount\": 0\n}"
+        }
+      ]
+    },
+    {
+      "name": "Actualizar Estado del Pedido",
+      "request": {
+        "method": "PUT",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": {
+          "raw": "{{baseUrl}}/api/orders/{{orderId}}/status",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "orders", "{{orderId}}", "status" ]
+        },
+        "description": "Actualiza el estado de un pedido.\n\nValores validos para 'status': Pending, PaymentProcessing, PaymentFailed, InventoryProcessing, InventoryFailed, Completed, Cancelled, Shipped, Delivered.\n\nRegla de negocio: un pedido en estado Shipped o Delivered es inmutable; cualquier intento de cambiar su estado responde 409 Conflict.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"PaymentProcessing\"\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/status" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"status\": \"PaymentProcessing\",\n  \"updatedAt\": \"2026-08-19T18:05:00Z\"\n}"
+        },
+        {
+          "name": "400 Bad Request (valor de estado invalido)",
+          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/status" } },
+          "status": "Bad Request",
+          "code": 400,
+          "header": [],
+          "body": "\"Invalid status value: 'NotARealStatus'.\""
+        },
+        {
+          "name": "409 Conflict (pedido inmutable)",
+          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/status" } },
+          "status": "Conflict",
+          "code": 409,
+          "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
+          "body": "{\n  \"status\": 409,\n  \"title\": \"Order in status 'Shipped' is immutable and cannot be modified.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Cancelar Pedido",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/orders/{{orderId}}",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "orders", "{{orderId}}" ]
+        },
+        "description": "Cancela un pedido.\n\nRegla de negocio: solo se puede cancelar un pedido en estado Pending o PaymentProcessing. Cualquier otro estado responde 409 Conflict."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"status\": \"Cancelled\",\n  \"updatedAt\": \"2026-08-19T18:10:00Z\"\n}"
+        },
+        {
+          "name": "409 Conflict (no cancelable en el estado actual)",
+          "originalRequest": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "status": "Conflict",
+          "code": 409,
+          "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
+          "body": "{\n  \"status\": 409,\n  \"title\": \"Order in status 'Shipped' cannot be cancelled. Only orders in 'Pending' or 'PaymentProcessing' can be cancelled.\"\n}"
+        },
+        {
+          "name": "404 Not Found",
+          "originalRequest": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "status": "Not Found",
+          "code": 404,
+          "header": [],
+          "body": ""
+        }
+      ]
+    }
+  ]
+}
