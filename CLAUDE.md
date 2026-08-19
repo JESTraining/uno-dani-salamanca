@@ -14,9 +14,9 @@ Este resumen se actualiza al cierre de cada fase, pero puede desactualizarse ent
 
 ## Fuente de Verdad
 
-[`README.md`](README.md) contiene el enunciado completo de la prueba tecnica, en ingles, organizado en seis fases (Phase 1 a Phase 6) con sus tareas, reglas de negocio, criterios de evaluacion y retos bonus. Es la especificacion fuente del proyecto; ante cualquier ambiguedad, prevalece sobre cualquier otra interpretacion.
+[`docs/technical-exercise.md`](docs/technical-exercise.md) contiene el enunciado completo de la prueba tecnica, en ingles, organizado en seis fases (Phase 1 a Phase 6) con sus tareas, reglas de negocio, criterios de evaluacion y retos bonus. Es la especificacion fuente del proyecto; ante cualquier ambiguedad, prevalece sobre cualquier otra interpretacion. `README.md`, en la raiz, es la presentacion publica del proyecto (para quien lo evalue o lo clone), no la especificacion — no debe usarse como fuente de requisitos.
 
-Antes de iniciar el trabajo de una fase, un agente debe leer completa la seccion correspondiente de `README.md`. No se debe avanzar a la fase siguiente sin haber cubierto sus requisitos (o haber acordado explicitamente con el usuario una excepcion).
+Antes de iniciar el trabajo de una fase, un agente debe leer completa la seccion correspondiente de `docs/technical-exercise.md`. No se debe avanzar a la fase siguiente sin haber cubierto sus requisitos (o haber acordado explicitamente con el usuario una excepcion).
 
 Este archivo (`CLAUDE.md`) funciona como tablero de estado del proyecto: la seccion "Estado Actual del Repositorio" se actualiza al cierre de cada fase.
 
@@ -99,7 +99,7 @@ Estas reglas provienen del enunciado original y deben quedar reflejadas en valid
 - Si la reserva no se confirma dentro de 5 minutos, se libera automaticamente y se dispara un evento de fallo.
 - Toda operacion de stock debe ser atomica (transaccion SQL) y proteger contra sobreventa mediante bloqueo a nivel de fila o concurrencia optimista.
 
-Ver el enunciado completo en [`README.md`](README.md) antes de implementar la logica correspondiente.
+Ver el enunciado completo en [`docs/technical-exercise.md`](docs/technical-exercise.md) antes de implementar la logica correspondiente.
 
 ## Seguridad
 
@@ -129,7 +129,7 @@ Ver el enunciado completo en [`README.md`](README.md) antes de implementar la lo
 
 1. Leer este archivo completo antes de tocar codigo.
 2. Identificar en que fase esta el proyecto revisando la seccion "Estado Actual del Repositorio" de este archivo.
-3. Leer la seccion correspondiente de `README.md` completa antes de empezar a escribir codigo.
+3. Leer la seccion correspondiente de `docs/technical-exercise.md` completa antes de empezar a escribir codigo.
 4. Implementar unicamente lo que esa fase pide; no adelantar trabajo de fases posteriores ni de los retos bonus sin que el usuario lo pida explicitamente.
 5. Al completar una fase, actualizar la seccion "Estado Actual del Repositorio" de este archivo.
 6. Si se descubre una ambiguedad en el enunciado, resolverla con el criterio que mejor se ajuste al resto de las reglas de este archivo, y dejar constancia de la interpretacion tomada en el codigo o en el mensaje de commit correspondiente.
@@ -147,12 +147,12 @@ Ver el enunciado completo en [`README.md`](README.md) antes de implementar la lo
 - No introducir un camino que complete o modifique un pedido sin pasar por las reglas de negocio y el flujo de Saga descritos.
 - No omitir la idempotencia en creacion de pedidos ni en procesamiento de pagos.
 - No commitear secretos, cadenas de conexion reales ni archivos `.env` con valores sensibles.
-- No implementar retos bonus (ver la seccion "Bonus Challenges" de `README.md`) antes de completar las seis fases principales, salvo pedido explicito del usuario.
+- No implementar retos bonus (ver la seccion "Bonus Challenges" de `docs/technical-exercise.md`) antes de completar las seis fases principales, salvo pedido explicito del usuario.
 - No usar `git push --force`, `git reset --hard` ni comandos destructivos similares sin autorizacion explicita del usuario para esa accion puntual.
 
 ## Estructura de Carpetas Objetivo
 
-Mismo arbol que la seccion "Suggested Folder Structure" de `README.md`, mas los archivos que ya existen fuera de esa lista original:
+Mismo arbol que la seccion "Suggested Folder Structure" de `docs/technical-exercise.md`, mas los archivos que ya existen fuera de esa lista original:
 
 ```
 /
@@ -165,12 +165,13 @@ Mismo arbol que la seccion "Suggested Folder Structure" de `README.md`, mas los 
 ├── docker/                 (Fase 5 — pendiente)
 ├── docs/
 │   ├── api/                (implementado: coleccion Postman por servicio)
+│   ├── technical-exercise.md  (implementado: enunciado original, movido desde README.md)
 │   ├── architecture.md     (Fase 6 — pendiente)
 │   └── adr/                (Fase 6 — pendiente)
 ├── scripts/                (implementado: setup-databases.sql, payment-service-schema.sql, inventory-service-schema.sql)
 ├── CLAUDE.md
 ├── .gitignore
-└── README.md
+└── README.md               (presentacion publica del proyecto, no la especificacion)
 ```
 
-`CLAUDE.md`, `.gitignore`, `scripts/`, `docs/api/` y `src/OrderService/` ya existen. El resto de la estructura se construye de forma incremental, fase por fase.
+`CLAUDE.md`, `.gitignore`, `scripts/`, `docs/api/`, `docs/technical-exercise.md` y `src/OrderService/` ya existen. El resto de la estructura se construye de forma incremental, fase por fase.
