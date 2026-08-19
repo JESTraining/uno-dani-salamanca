@@ -1,7 +1,7 @@
--- Ejecutar como superusuario (postgres) contra el contenedor orders-postgres.
--- Crea una base de datos y un rol dedicado por servicio, para cumplir la regla
--- "base de datos por servicio": ningun servicio comparte credenciales ni base
--- de datos con otro.
+-- Run as superuser (postgres) against the orders-postgres container.
+-- Creates a database and a dedicated role per service, to satisfy the
+-- "database per service" rule: no service shares credentials or a
+-- database with another.
 
 CREATE DATABASE orderdb;
 CREATE DATABASE paymentdb;

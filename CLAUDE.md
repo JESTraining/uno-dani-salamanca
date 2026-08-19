@@ -1,32 +1,32 @@
 # CLAUDE.md
 
-Este archivo es la fuente de reglas obligatorias para cualquier agente (Claude Code u otro) que trabaje sobre este repositorio. Antes de escribir o modificar código, cualquier agente debe leer este documento completo.
+This file is the source of mandatory rules for any agent (Claude Code or otherwise) working on this repository. Any agent must read this document in full before writing or modifying code.
 
-## Proposito del Repositorio
+## Repository Purpose
 
-Este repositorio implementa la prueba tecnica "Full-Stack Microservices Exercise: Real-time Order Processing System": un sistema de procesamiento de pedidos basado en microservicios (C#/.NET, SQL, RabbitMQ) con frontend en React o Angular y actualizaciones de estado en tiempo real via SignalR.
+This repository implements the technical exercise "Full-Stack Microservices Exercise: Real-time Order Processing System": an order processing system based on microservices (C#/.NET, SQL, RabbitMQ) with an Angular frontend and real-time status updates via SignalR.
 
-## Estado Actual del Repositorio
+## Current Repository State
 
-La Fase 1 esta completa: los esquemas de base de datos de los tres servicios existen (`orderdb` via migraciones EF Core, `paymentdb` e `inventorydb` via los scripts en `scripts/`) y el Order Service esta implementado end-to-end en `src/OrderService/` (API REST, EF Core, RabbitMQ, 38 pruebas automatizadas en verde). Payment Service, Inventory Service, API Gateway, Frontend e infraestructura Docker todavia no existen.
+Phase 1 is complete: the database schemas for all three services exist (`orderdb` via EF Core migrations, `paymentdb` and `inventorydb` via the scripts in `scripts/`) and Order Service is implemented end-to-end in `src/OrderService/` (REST API, EF Core, RabbitMQ, 38 automated tests passing). Payment Service, Inventory Service, API Gateway, Frontend, and Docker infrastructure do not exist yet.
 
-Este resumen se actualiza al cierre de cada fase, pero puede desactualizarse entre sesiones. Cualquier agente debe verificar el estado real con las herramientas de busqueda del repositorio antes de asumir que algo esta o no esta implementado.
+This summary is updated at the close of each phase, but it may fall out of date between sessions. Any agent must verify the real state using the repository's own search tools before assuming something is or is not implemented.
 
-## Fuente de Verdad
+## Source of Truth
 
-[`docs/technical-exercise.md`](docs/technical-exercise.md) contiene el enunciado completo de la prueba tecnica, en ingles, organizado en seis fases (Phase 1 a Phase 6) con sus tareas, reglas de negocio, criterios de evaluacion y retos bonus. Es la especificacion fuente del proyecto; ante cualquier ambiguedad, prevalece sobre cualquier otra interpretacion. `README.md`, en la raiz, es la presentacion publica del proyecto (para quien lo evalue o lo clone), no la especificacion — no debe usarse como fuente de requisitos.
+[`docs/technical-exercise.md`](docs/technical-exercise.md) contains the full technical exercise statement, in English, organized into six phases (Phase 1 through Phase 6) with their tasks, business rules, evaluation criteria, and bonus challenges. It is the project's source specification; in case of any ambiguity, it takes precedence over any other interpretation. `README.md`, at the repository root, is the project's public presentation (for whoever evaluates or clones it), not the specification — it must not be used as a source of requirements.
 
-Antes de iniciar el trabajo de una fase, un agente debe leer completa la seccion correspondiente de `docs/technical-exercise.md`. No se debe avanzar a la fase siguiente sin haber cubierto sus requisitos (o haber acordado explicitamente con el usuario una excepcion).
+Before starting work on a phase, an agent must read the corresponding section of `docs/technical-exercise.md` in full. Do not move on to the next phase without having covered its requirements (or having explicitly agreed on an exception with the user).
 
-Este archivo (`CLAUDE.md`) funciona como tablero de estado del proyecto: la seccion "Estado Actual del Repositorio" se actualiza al cierre de cada fase.
+This file (`CLAUDE.md`) acts as the project's status board: the "Current Repository State" section is updated at the close of each phase.
 
-## Arquitectura: Reglas No Negociables
+## Architecture: Non-Negotiable Rules
 
-- **Base de datos por servicio.** Order Service, Payment Service e Inventory Service tienen cada uno su propia base de datos, sin excepcion. Ningun servicio accede directamente a la base de datos de otro servicio, ni mediante conexion directa ni mediante vistas compartidas.
-- **Comunicacion sincrona solo via API Gateway o llamadas REST explicitas documentadas.** El frontend nunca llama directamente a un microservicio; siempre pasa por el API Gateway.
-- **Comunicacion asincrona solo via RabbitMQ**, usando exactamente estos contratos de evento (formato JSON):
+- **Database per service.** Order Service, Payment Service, and Inventory Service each have their own database, without exception. No service accesses another service's database directly, whether through a direct connection or a shared view.
+- **Synchronous communication only via API Gateway or explicitly documented REST calls.** The frontend never calls a microservice directly; it always goes through the API Gateway.
+- **Asynchronous communication only via RabbitMQ**, using exactly these event contracts (JSON format):
 
-  | Evento | Campos |
+  | Event | Fields |
   |--------|--------|
   | `OrderCreatedEvent` | OrderId, CustomerId, TotalAmount, Items, Timestamp |
   | `PaymentProcessedEvent` | OrderId, TransactionId, Amount, Timestamp |
@@ -36,142 +36,143 @@ Este archivo (`CLAUDE.md`) funciona como tablero de estado del proyecto: la secc
   | `OrderCompletedEvent` | OrderId, Status, Timestamp |
   | `OrderStatusChangedEvent` | OrderId, PreviousStatus, NewStatus, Timestamp |
 
-  `OrderStatusChangedEvent` no esta en el enunciado original: se agrego en la Fase 1 porque el Order Service publica eventos en cada cambio de estado (no solo en la creacion) y el contrato original solo cubria creacion y cierre del pedido. Implementado en `OrderService.Application.IntegrationEvents`. Si un agente necesita agregar un campo o un evento nuevo, debe actualizar esta tabla en el mismo cambio, no dejar el codigo y la documentacion desincronizados.
+  `OrderStatusChangedEvent` is not in the original exercise statement: it was added in Phase 1 because Order Service publishes an event on every status change (not only on creation), and the original contract only covered creation and completion. Implemented in `OrderService.Application.IntegrationEvents`. If an agent needs to add a field or a new event, it must update this table in the same change — do not let code and documentation drift apart.
 
-- **El patron Saga gobierna el flujo completo del pedido** (creacion, pago, reserva de inventario, cierre o compensacion). Ninguna implementacion puede introducir un camino alterno que complete un pedido sin pasar por el flujo de Saga descrito.
-- **Idempotencia obligatoria** en la creacion de pedidos y en el procesamiento de pagos. Todo manejador de evento debe ser idempotente (reprocesar el mismo evento dos veces no debe duplicar efectos).
+- **The Saga pattern governs the entire order flow** (creation, payment, inventory reservation, completion or compensation). No implementation may introduce an alternate path that completes an order without going through the described Saga flow.
+- **Idempotency is mandatory** for order creation and payment processing. Every event handler must be idempotent (reprocessing the same event twice must not duplicate effects).
 
-## Stack Tecnologico
+## Technology Stack
 
-No cambiar estas elecciones sin confirmarlo explicitamente con el usuario:
+Do not change these choices without explicit confirmation from the user:
 
-- **Backend:** C# sobre .NET 10 (LTS vigente; el enunciado original del ejercicio menciona .NET 8, pero el proyecto adopta la LTS actual instalada en el entorno de desarrollo).
-- **Acceso a datos:** Entity Framework Core (decision tomada en la Fase 1; no usar Dapper, para mantener un unico patron de acceso a datos entre servicios), con patron Repository y Unit of Work. Nomenclatura de columnas en snake_case via el paquete `EFCore.NamingConventions` (`UseSnakeCaseNamingConvention()` en cada `DbContext`), para que coincida con los scripts SQL escritos a mano.
-- **Bases de datos:** PostgreSQL (decision tomada en la Fase 1). El enunciado original permite SQL Server o MySQL, pero ya existe un unico contenedor `orders-postgres` con una base de datos logica y un rol dedicado por servicio (`orderdb`/`order_service`, `paymentdb`/`payment_service`, `inventorydb`/`inventory_service` — ver `scripts/setup-databases.sql`). Mantener Postgres para Payment e Inventory Service salvo que el usuario pida explicitamente cambiar de motor.
-- **Concurrencia optimista:** columna de sistema `xmin` de PostgreSQL como concurrency token (shadow property `uint xmin` con `IsConcurrencyToken()` + `HasColumnType("xid")`), sin agregar columnas de version manuales salvo que el motor no sea Postgres. Ver `OrderConfiguration` en `OrderService.Infrastructure` como referencia.
-- **Mensajeria:** RabbitMQ via MassTransit, **fijado en la version 8.x** (`MassTransit.RabbitMQ` 8.5.10 o cualquier 8.x posterior; version exacta, no floating). **Nunca actualizar a MassTransit 9 o superior**: esas versiones exigen una licencia comercial (`SetLicense`/`SetLicenseLocation` o variables `MT_LICENSE`/`MT_LICENSE_PATH`) y la aplicacion falla al iniciar sin ella (`MassTransit.ConfigurationException` en el arranque del host). Exchanges topic o direct, dead letter queues y reintento con backoff exponencial (3 intentos), a definir en la Fase 3.
-- **Frontend:** Angular (decision tomada). No usar React en este proyecto. UI con Angular Material, PrimeNG o ng-bootstrap; estado con NgRx.
-- **Tiempo real:** SignalR (hub en el Order Service, cliente en el frontend).
-- **Contenedores:** Docker con Dockerfiles multi-etapa, orquestados con Docker Compose.
-- **Logging:** Serilog, con sinks configurables (Console, File, Seq).
-- **Observabilidad:** OpenTelemetry (trazas) y Prometheus (metricas) a partir de la Fase 5.
-- **Autenticacion:** JWT con autorizacion basada en roles, a partir de la Fase 5.
+- **Backend:** C# on .NET 10 (current LTS; the original exercise statement mentions .NET 8, but the project adopts the current LTS installed in the development environment).
+- **Data access:** Entity Framework Core (decision made in Phase 1; do not use Dapper, to keep a single data access pattern across services), with the Repository and Unit of Work pattern. Column naming in snake_case via the `EFCore.NamingConventions` package (`UseSnakeCaseNamingConvention()` in each `DbContext`), to match the hand-written SQL scripts.
+- **Databases:** PostgreSQL (decision made in Phase 1). The original exercise statement allows SQL Server or MySQL, but a single `orders-postgres` container already exists, with one logical database and one dedicated role per service (`orderdb`/`order_service`, `paymentdb`/`payment_service`, `inventorydb`/`inventory_service` — see `scripts/setup-databases.sql`). Keep Postgres for Payment and Inventory Service unless the user explicitly asks to switch engines.
+- **Optimistic concurrency:** PostgreSQL's `xmin` system column as the concurrency token (shadow property `uint xmin` with `IsConcurrencyToken()` + `HasColumnType("xid")`), without adding manual version columns unless the engine is not Postgres. See `OrderConfiguration` in `OrderService.Infrastructure` as a reference.
+- **Messaging:** RabbitMQ via MassTransit, **pinned to version 8.x** (`MassTransit.RabbitMQ` 8.5.10 or any later 8.x version; exact version, not floating). **Never upgrade to MassTransit 9 or higher**: those versions require a commercial license (`SetLicense`/`SetLicenseLocation` or the `MT_LICENSE`/`MT_LICENSE_PATH` environment variables) and the application fails to start without one (`MassTransit.ConfigurationException` at host startup). Topic or direct exchanges, dead letter queues, and exponential backoff retry (3 attempts), to be defined in Phase 3.
+- **Frontend:** Angular (decision made). Do not use React in this project. UI with Angular Material, PrimeNG, or ng-bootstrap; state with NgRx.
+- **Real-time:** SignalR (hub in Order Service, client in the frontend).
+- **Containers:** Docker with multi-stage Dockerfiles, orchestrated with Docker Compose.
+- **Logging:** Serilog, with configurable sinks (Console, File, Seq).
+- **Observability:** OpenTelemetry (tracing) and Prometheus (metrics) starting in Phase 5.
+- **Authentication:** JWT with role-based authorization, starting in Phase 5.
 
-## Convenciones de Codigo
+## Code Conventions
 
-- Seguir principios SOLID y DRY. No crear abstracciones ni capas adicionales que el requisito actual no necesite.
-- Usar async/await para toda operacion de entrada/salida (base de datos, HTTP, mensajeria).
-- Usar inyeccion de dependencias del contenedor nativo de .NET; evitar patrones de localizador de servicios (service locator).
-- Nomenclatura: PascalCase para clases, metodos y propiedades publicas en C#; camelCase para variables locales y parametros; camelCase para variables y funciones en JavaScript/TypeScript, PascalCase para componentes de React.
-- Identificadores de codigo, nombres de variables, nombres de clases y mensajes de commit se escriben en ingles, siguiendo la convencion tecnica habitual, aun cuando la documentacion del proyecto (este archivo) este en espanol.
-- No agregar comentarios que describan que hace el codigo cuando el nombre de la funcion o variable ya lo deja claro. Solo comentar cuando exista una razon no obvia (una restriccion externa, un workaround puntual, una decision que sorprenderia a quien lea el codigo despues).
-- No dejar implementaciones a medio terminar ni funcionalidad detras de flags "por si acaso". Si una tarea se marca como completa, debe estar terminada y probada.
-- Los mensajes de commit deben ser descriptivos y en ingles, preferentemente en formato tipo Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
-- En DTOs definidos como `record` con constructor primario, los atributos de validacion (`[Required]`, `[MaxLength]`, `[Range]`, etc.) van directo sobre el parametro, sin el prefijo `[property: ...]`. Con `property:` ASP.NET Core lanza `InvalidOperationException` en tiempo de ejecucion ("validation metadata defined on property... must be associated with the constructor parameter") en lugar de devolver 400. Ver `OrderService.Application/Contracts/OrderDtos.cs`.
+- Follow SOLID and DRY principles. Do not create abstractions or extra layers that the current requirement does not need.
+- Use async/await for every I/O operation (database, HTTP, messaging).
+- Use .NET's native dependency injection container; avoid the service locator pattern.
+- Naming: PascalCase for classes, methods, and public properties in C#; camelCase for local variables and parameters; camelCase for variables and functions in JavaScript/TypeScript, PascalCase for React components.
+- **All code comments must be written in English**, regardless of the language of the surrounding project documentation.
+- Code identifiers, variable names, class names, and commit messages are written in English, following standard technical convention.
+- All project documentation that ships in the repository (this file, READMEs, ADRs once they exist) is written in English. The `plan/` folder is local-only planning material, excluded from the repository via `.gitignore`, and stays in Spanish for the user's own tracking — it is never a source of requirements for anyone outside this project.
+- Do not add comments that describe what the code does when the function or variable name already makes it clear. Only comment when there is a non-obvious reason (an external constraint, a specific workaround, a decision that would surprise someone reading the code later).
+- Do not leave implementations half-finished, nor functionality behind "just in case" flags. If a task is marked complete, it must be finished and tested.
+- Commit messages must be descriptive and in English, preferably in Conventional Commits format (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
+- In DTOs defined as `record` with a primary constructor, validation attributes (`[Required]`, `[MaxLength]`, `[Range]`, etc.) go directly on the parameter, without the `[property: ...]` prefix. With `property:`, ASP.NET Core throws an `InvalidOperationException` at runtime ("validation metadata defined on property... must be associated with the constructor parameter") instead of returning 400. See `OrderService.Application/Contracts/OrderDtos.cs`.
 
-## Patron Arquitectonico Establecido (replicar en Payment e Inventory Service)
+## Established Architecture Pattern (replicate in Payment and Inventory Service)
 
-Order Service (Fase 1, en `src/OrderService/`) fija el patron que Payment Service e Inventory Service deben seguir en la Fase 2, para que los tres servicios sean consistentes:
+Order Service (Phase 1, in `src/OrderService/`) sets the pattern that Payment Service and Inventory Service must follow in Phase 2, so that all three services stay consistent:
 
-- Cinco proyectos por servicio: `<Servicio>.Domain` (entidades y reglas de negocio como metodos, sin setters publicos), `<Servicio>.Application` (DTOs en `Contracts/`, interfaces en `Abstractions/`, casos de uso en `Services/`, eventos de integracion en `IntegrationEvents/`, excepciones en `Exceptions/`), `<Servicio>.Infrastructure` (`DbContext` y configuraciones EF Core en `Persistence/`, publicador de eventos en `Messaging/`, clientes HTTP salientes en `ExternalServices/`), `<Servicio>.API` (`Controllers/`, `Middleware/`, `Program.cs`), `<Servicio>.Tests` (subcarpetas `Domain/`, `Application/`, `Unit/`, `Integration/`).
-- Manejo de errores centralizado en un `ExceptionHandlingMiddleware` por servicio, que traduce excepciones de dominio/aplicacion a codigos HTTP (404 no encontrado, 409 conflicto de estado o de concurrencia, 422 regla de negocio incumplida, 503 dependencia externa no disponible). No usar `try/catch` repetido en cada controller.
-- Idempotencia via header `Idempotency-Key`, con una tabla dedicada (`idempotency_keys` en Order Service) cuyo commit ocurre en la misma transaccion que la operacion principal (mismo `SaveChangesAsync`), no en un paso separado.
-- Pruebas de integracion con `WebApplicationFactory` + `Testcontainers.PostgreSql` (base de datos real efimera), reemplazando en el `CustomWebApplicationFactory` unicamente las dependencias hacia servicios externos que todavia no existen o no conviene levantar en el test (ver `AlwaysAvailableInventoryChecker` en `OrderService.Tests`).
+- Five projects per service: `<Service>.Domain` (entities and business rules as methods, no public setters), `<Service>.Application` (DTOs in `Contracts/`, interfaces in `Abstractions/`, use cases in `Services/`, integration events in `IntegrationEvents/`, exceptions in `Exceptions/`), `<Service>.Infrastructure` (`DbContext` and EF Core configurations in `Persistence/`, event publisher in `Messaging/`, outbound HTTP clients in `ExternalServices/`), `<Service>.API` (`Controllers/`, `Middleware/`, `Program.cs`), `<Service>.Tests` (subfolders `Domain/`, `Application/`, `Unit/`, `Integration/`).
+- Centralized error handling in an `ExceptionHandlingMiddleware` per service, translating domain/application exceptions into HTTP status codes (404 not found, 409 state or concurrency conflict, 422 business rule violation, 503 external dependency unavailable). Do not repeat `try/catch` in every controller.
+- Idempotency via the `Idempotency-Key` header, with a dedicated table (`idempotency_keys` in Order Service) whose commit happens in the same transaction as the main operation (same `SaveChangesAsync`), not in a separate step.
+- Integration tests with `WebApplicationFactory` + `Testcontainers.PostgreSql` (a real, ephemeral database), replacing in `CustomWebApplicationFactory` only the dependencies on external services that do not exist yet or should not be spun up in the test (see `AlwaysAvailableInventoryChecker` in `OrderService.Tests`).
 
-## Reglas de Negocio Criticas (nunca deben violarse)
+## Critical Business Rules (must never be violated)
 
-Estas reglas provienen del enunciado original y deben quedar reflejadas en validaciones reales del codigo, no solo en la documentacion:
+These rules come from the original exercise statement and must be reflected in real code validations, not only in documentation:
 
 **Order Service**
-- Un pedido solo puede cancelarse si esta en estado `Pending` o `PaymentProcessing`.
-- Los pedidos en estado `Shipped` o `Delivered` son inmutables.
-- El monto total debe ser mayor que 0.
-- Todo pedido requiere al menos un articulo.
+- An order can only be cancelled if it is in `Pending` or `PaymentProcessing` status.
+- Orders in `Shipped` or `Delivered` status are immutable.
+- The total amount must be greater than 0.
+- Every order requires at least one item.
 
-**Payment Service (gateway simulado)**
-- Pagos superiores a $10,000: siempre fallan (deteccion de fraude).
-- Pagos cuyo monto termina en `.99`: 20% de probabilidad de fallo, aleatoria.
-- Resto de los pagos: exitosos.
-- Simular una demora de procesamiento de 2 a 5 segundos con `Task.Delay`.
+**Payment Service (simulated gateway)**
+- Payments over $10,000: always fail (fraud detection).
+- Payments whose amount ends in `.99`: 20% random failure probability.
+- All other payments: succeed.
+- Simulate a 2-to-5-second processing delay with `Task.Delay`.
 
 **Inventory Service**
-- El stock se reserva en el momento en que el pago se procesa exitosamente (evento `PaymentProcessed`).
-- Si la reserva no se confirma dentro de 5 minutos, se libera automaticamente y se dispara un evento de fallo.
-- Toda operacion de stock debe ser atomica (transaccion SQL) y proteger contra sobreventa mediante bloqueo a nivel de fila o concurrencia optimista.
+- Stock is reserved the moment a payment is processed successfully (`PaymentProcessed` event).
+- If the reservation is not confirmed within 5 minutes, it is automatically released and a failure event is triggered.
+- Every stock operation must be atomic (SQL transaction) and protect against overselling via row-level locking or optimistic concurrency.
 
-Ver el enunciado completo en [`docs/technical-exercise.md`](docs/technical-exercise.md) antes de implementar la logica correspondiente.
+See the full exercise statement in [`docs/technical-exercise.md`](docs/technical-exercise.md) before implementing the corresponding logic.
 
-## Seguridad
+## Security
 
-- Todas las consultas SQL deben ser parametrizadas. Prohibido concatenar valores de entrada del usuario directamente en una consulta o comando.
-- Validar toda entrada en el limite de la API (payloads de request), no confiar en validaciones del frontend como unica barrera.
-- Nunca commitear secretos, cadenas de conexion con credenciales reales, ni claves de API. Usar variables de entorno y `appsettings.json` solo para configuracion no sensible.
-- JWT obligatorio en endpoints que no sean explicitamente publicos; autorizacion basada en roles donde el enunciado lo indique (por ejemplo, alta de productos restringida a administrador).
-- CORS debe configurarse con origenes explicitos; no usar wildcard (`*`) en configuraciones destinadas a produccion.
+- All SQL queries must be parameterized. Concatenating user input directly into a query or command is prohibited.
+- Validate every input at the API boundary (request payloads); do not rely on frontend validation as the only barrier.
+- Never commit secrets, connection strings with real credentials, or API keys. Use environment variables and `appsettings.json` only for non-sensitive configuration.
+- JWT is mandatory on endpoints that are not explicitly public; role-based authorization where the exercise statement requires it (for example, product creation restricted to administrators).
+- CORS must be configured with explicit origins; do not use a wildcard (`*`) in configurations intended for production.
 
 ## Testing
 
-- Cobertura minima de pruebas unitarias: 70%, medida sobre la logica de servicios, modelos de dominio y manejadores de eventos.
-- Pruebas unitarias con xUnit o NUnit en el backend; Jest y React Testing Library en el frontend (si se elige React).
-- Pruebas de integracion de base de datos con TestContainers o base de datos en memoria.
-- Pruebas de integracion de endpoints con `WebApplicationFactory`.
-- Toda regla de negocio critica listada arriba debe tener al menos una prueba que la cubra explicitamente, incluyendo sus casos limite (por ejemplo, un pago de exactamente $10,000, un monto que termina en `.99`).
-- Ninguna tarea se considera terminada si el codigo que la implementa no tiene pruebas asociadas.
+- Minimum unit test coverage: 70%, measured over service logic, domain models, and event handlers.
+- Unit tests with xUnit or NUnit on the backend; Jest and React Testing Library on the frontend (if React is chosen).
+- Database integration tests with TestContainers or an in-memory database.
+- Endpoint integration tests with `WebApplicationFactory`.
+- Every critical business rule listed above must have at least one test that covers it explicitly, including its edge cases (for example, a payment of exactly $10,000, an amount ending in `.99`).
+- No task is considered done if the code implementing it has no associated tests.
 
-## Docker y DevOps
+## Docker and DevOps
 
-- Cada microservicio y el frontend tienen su propio Dockerfile con build multi-etapa.
-- Cada contenedor expone un health check funcional.
-- La configuracion depende de variables de entorno; no hardcodear hosts, puertos ni credenciales en el codigo o en las imagenes.
-- `docker-compose.yml` debe permitir levantar el sistema completo (todos los servicios, RabbitMQ, bases de datos) con un unico comando, en un entorno limpio.
+- Each microservice and the frontend have their own Dockerfile with a multi-stage build.
+- Each container exposes a working health check.
+- Configuration depends on environment variables; do not hardcode hosts, ports, or credentials in code or in images.
+- `docker-compose.yml` must be able to bring up the entire system (all services, RabbitMQ, databases) with a single command, in a clean environment.
 
-## Flujo de Trabajo para Agentes
+## Workflow for Agents
 
-1. Leer este archivo completo antes de tocar codigo.
-2. Identificar en que fase esta el proyecto revisando la seccion "Estado Actual del Repositorio" de este archivo.
-3. Leer la seccion correspondiente de `docs/technical-exercise.md` completa antes de empezar a escribir codigo.
-4. Implementar unicamente lo que esa fase pide; no adelantar trabajo de fases posteriores ni de los retos bonus sin que el usuario lo pida explicitamente.
-5. Al completar una fase, actualizar la seccion "Estado Actual del Repositorio" de este archivo.
-6. Si se descubre una ambiguedad en el enunciado, resolverla con el criterio que mejor se ajuste al resto de las reglas de este archivo, y dejar constancia de la interpretacion tomada en el codigo o en el mensaje de commit correspondiente.
-7. Ejecutar las pruebas relevantes antes de dar una tarea por concluida.
+1. Read this file in full before touching any code.
+2. Identify which phase the project is in by checking the "Current Repository State" section of this file.
+3. Read the corresponding section of `docs/technical-exercise.md` in full before starting to write code.
+4. Implement only what that phase asks for; do not get ahead of later phases or bonus challenges unless the user explicitly asks for it.
+5. When a phase is completed, update the "Current Repository State" section of this file.
+6. If an ambiguity is found in the exercise statement, resolve it using whatever criteria best fits the rest of this file's rules, and record the interpretation taken in the code or in the corresponding commit message.
+7. Run the relevant tests before considering a task finished.
 
-## Estilo de Documentacion y Comunicacion
+## Documentation and Communication Style
 
-- Prohibido el uso de emojis en cualquier archivo del repositorio: codigo, comentarios, commits, documentacion o salida hacia el usuario. El tono debe ser serio y profesional en todo momento.
-- Toda la documentacion de arquitectura del proyecto (ADRs, este archivo) se redacta en espanol. El codigo fuente y los mensajes de commit se redactan en ingles.
-- No crear archivos de documentacion adicionales fuera de la estructura ya definida (`docs/`, este `CLAUDE.md`) salvo que el usuario lo solicite.
+- Emojis are prohibited anywhere in the repository: code, comments, commits, documentation, or output to the user. The tone must be serious and professional at all times.
+- No additional documentation files are created outside the structure already defined (`docs/`, this `CLAUDE.md`) unless the user requests it.
 
-## Prohibiciones Explicitas
+## Explicit Prohibitions
 
-- No acoplar servicios compartiendo base de datos o llamando directamente a la base de datos de otro servicio.
-- No introducir un camino que complete o modifique un pedido sin pasar por las reglas de negocio y el flujo de Saga descritos.
-- No omitir la idempotencia en creacion de pedidos ni en procesamiento de pagos.
-- No commitear secretos, cadenas de conexion reales ni archivos `.env` con valores sensibles.
-- No implementar retos bonus (ver la seccion "Bonus Challenges" de `docs/technical-exercise.md`) antes de completar las seis fases principales, salvo pedido explicito del usuario.
-- No usar `git push --force`, `git reset --hard` ni comandos destructivos similares sin autorizacion explicita del usuario para esa accion puntual.
+- Do not couple services by sharing a database or by calling another service's database directly.
+- Do not introduce a path that completes or modifies an order without going through the described business rules and Saga flow.
+- Do not skip idempotency in order creation or payment processing.
+- Do not commit secrets, real connection strings, or `.env` files with sensitive values.
+- Do not implement bonus challenges (see the "Bonus Challenges" section of `docs/technical-exercise.md`) before completing the six main phases, unless the user explicitly asks for it.
+- Do not use `git push --force`, `git reset --hard`, or similar destructive commands without the user's explicit authorization for that specific action.
 
-## Estructura de Carpetas Objetivo
+## Target Folder Structure
 
-Mismo arbol que la seccion "Suggested Folder Structure" de `docs/technical-exercise.md`, mas los archivos que ya existen fuera de esa lista original:
+Same tree as the "Suggested Folder Structure" section of `docs/technical-exercise.md`, plus the files that already exist outside that original list:
 
 ```
 /
 ├── src/
-│   ├── OrderService/       (Fase 1 — implementado: Domain/Application/Infrastructure/API/Tests)
-│   ├── PaymentService/     (Fase 2 — pendiente)
-│   ├── InventoryService/   (Fase 2 — pendiente)
-│   ├── ApiGateway/         (Fase 5 — pendiente)
-│   └── Frontend/           (Fase 4 — pendiente, Angular)
-├── docker/                 (Fase 5 — pendiente)
+│   ├── OrderService/       (Phase 1 - implemented: Domain/Application/Infrastructure/API/Tests)
+│   ├── PaymentService/     (Phase 2 - pending)
+│   ├── InventoryService/   (Phase 2 - pending)
+│   ├── ApiGateway/         (Phase 5 - pending)
+│   └── Frontend/           (Phase 4 - pending, Angular)
+├── docker/                 (Phase 5 - pending)
 ├── docs/
-│   ├── api/                (implementado: coleccion Postman por servicio)
-│   ├── technical-exercise.md  (implementado: enunciado original, movido desde README.md)
-│   ├── architecture.md     (Fase 6 — pendiente)
-│   └── adr/                (Fase 6 — pendiente)
-├── scripts/                (implementado: setup-databases.sql, payment-service-schema.sql, inventory-service-schema.sql)
+│   ├── api/                (implemented: Postman collection per service)
+│   ├── technical-exercise.md  (implemented: original statement, moved from README.md)
+│   ├── architecture.md     (Phase 6 - pending)
+│   └── adr/                (Phase 6 - pending)
+├── scripts/                (implemented: setup-databases.sql, payment-service-schema.sql, inventory-service-schema.sql)
 ├── CLAUDE.md
 ├── .gitignore
-└── README.md               (presentacion publica del proyecto, no la especificacion)
+└── README.md               (public presentation of the project, not the specification)
 ```
 
-`CLAUDE.md`, `.gitignore`, `scripts/`, `docs/api/`, `docs/technical-exercise.md` y `src/OrderService/` ya existen. El resto de la estructura se construye de forma incremental, fase por fase.
+`CLAUDE.md`, `.gitignore`, `scripts/`, `docs/api/`, `docs/technical-exercise.md`, and `src/OrderService/` already exist. The rest of the structure is built incrementally, phase by phase.

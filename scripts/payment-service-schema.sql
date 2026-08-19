@@ -1,6 +1,6 @@
--- Esquema del Payment Service (Fase 1, Task 1.1). Ejecutar contra paymentdb.
--- El servicio en si (API, EF Core) se construye en la Fase 2; este script
--- deja el esquema listo con anticipacion, como pide el enunciado original.
+-- Payment Service schema (Phase 1, Task 1.1). Run against paymentdb.
+-- The service itself (API, EF Core) is built in Phase 2; this script
+-- gets the schema ready ahead of time, as the original exercise asks.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -20,8 +20,8 @@ CREATE TABLE payments (
 
 CREATE INDEX ix_payments_status ON payments (status);
 
--- Rastro de auditoria: un registro por cada intento de procesamiento,
--- incluso si el pago original se reintenta.
+-- Audit trail: one record per processing attempt, even if the original
+-- payment is retried.
 CREATE TABLE payment_transaction_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     payment_id UUID NOT NULL REFERENCES payments (id),

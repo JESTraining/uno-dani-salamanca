@@ -1,6 +1,6 @@
 namespace OrderService.Application.IntegrationEvents;
 
-/// Wire contract fixed in CLAUDE.md ("Arquitectura: Reglas No Negociables"). Any
+/// Wire contract fixed in CLAUDE.md ("Architecture: Non-Negotiable Rules"). Any
 /// field change here must be mirrored there in the same change.
 public sealed record OrderCreatedEvent(
     Guid OrderId,
@@ -11,7 +11,7 @@ public sealed record OrderCreatedEvent(
 
 public sealed record OrderCreatedEventItem(Guid ProductId, int Quantity);
 
-/// Wire contract fixed in CLAUDE.md ("Arquitectura: Reglas No Negociables").
+/// Wire contract fixed in CLAUDE.md ("Architecture: Non-Negotiable Rules").
 public sealed record OrderStatusChangedEvent(
     Guid OrderId,
     string PreviousStatus,

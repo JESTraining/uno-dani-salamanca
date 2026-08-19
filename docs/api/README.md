@@ -1,19 +1,19 @@
-# Colecciones Postman
+# Postman Collections
 
-Cada microservicio tiene su propia coleccion Postman en esta carpeta, nombrada `<Servicio>.postman_collection.json` (formato Postman Collection v2.1). No existe una coleccion combinada para todos los servicios: cada una se importa y se usa de forma independiente, en linea con la separacion de servicios del resto del proyecto.
+Each microservice has its own Postman collection in this folder, named `<Service>.postman_collection.json` (Postman Collection v2.1 format). There is no combined collection for all services: each one is imported and used independently, in line with the service separation used throughout the rest of the project.
 
-## Colecciones existentes
+## Existing Collections
 
-| Servicio | Archivo | Fase |
+| Service | File | Phase |
 |----------|---------|------|
 | Order Service | [OrderService.postman_collection.json](OrderService.postman_collection.json) | 1 |
-| Payment Service | pendiente | 2 |
-| Inventory Service | pendiente | 2 |
-| API Gateway | pendiente | 5 |
+| Payment Service | pending | 2 |
+| Inventory Service | pending | 2 |
+| API Gateway | pending | 5 |
 
-## Convencion
+## Convention
 
-- Cada coleccion define su propia variable `baseUrl` apuntando al puerto local del servicio.
-- Cada request incluye una descripcion con las reglas de negocio que aplica y los codigos de respuesta relevantes (exito y errores mas comunes), con al menos un ejemplo de respuesta guardado por caso.
-- Cuando un flujo depende de un id creado previamente (por ejemplo, operar sobre un pedido despues de crearlo), la request de creacion completa una variable de coleccion via un test script, para poder encadenar las siguientes peticiones sin copiar valores a mano.
-- Al construir un servicio nuevo, se agrega su coleccion aqui en el mismo cambio y se actualiza la tabla de arriba.
+- Each collection defines its own `baseUrl` variable pointing at the service's local port.
+- Every request includes a description of the business rules it applies and the relevant response codes (success and the most common errors), with at least one saved response example per case.
+- When a flow depends on an id created earlier (for example, operating on an order after creating it), the creation request fills a collection variable via a test script, so the following requests can be chained without copying values by hand.
+- When a new service is built, its collection is added here in the same change and the table above is updated.
