@@ -59,13 +59,13 @@ Each service owns its own database exclusively; there is no shared schema or cro
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Database schemas (all services) + Order Service | Complete |
-| 2 | Payment Service + Inventory Service | Pending |
+| 2 | Payment Service + Inventory Service | Complete |
 | 3 | RabbitMQ event contracts + Saga pattern | Pending |
 | 4 | Frontend (Angular) | Pending |
 | 5 | Docker Compose + production readiness | Pending |
 | 6 | Full test suite + documentation | Pending |
 
-Order Service is implemented end-to-end (REST API, EF Core, RabbitMQ publishing, 38 automated tests). The other services, the API Gateway, the frontend, and the Docker setup do not exist yet.
+All three core services (Order, Payment, Inventory) are implemented end-to-end and verified together against real RabbitMQ and PostgreSQL: creating an order automatically triggers payment processing and, on success, inventory reservation, with no manual steps in between. 99 automated tests passing across the three services. The API Gateway, the frontend, and the Docker setup do not exist yet.
 
 ## Getting Started
 
@@ -96,7 +96,7 @@ docker exec -i orders-postgres psql -U postgres -d inventorydb < scripts/invento
 
 This creates three logical databases (`orderdb`, `paymentdb`, `inventorydb`), each with its own dedicated role. Order Service's own schema is applied via its EF Core migration instead (next step).
 
-### 3. Run the Order Service
+### 3. Run Order Service
 
 ```bash
 cd src/OrderService
@@ -105,33 +105,55 @@ cd OrderService.API
 dotnet run --launch-profile http
 ```
 
-The API listens on `http://localhost:5290`, with Swagger at `http://localhost:5290/swagger`.
+Listens on `http://localhost:5290`, Swagger at `http://localhost:5290/swagger`. Order Service is the only one with an EF Core migration to apply — Payment and Inventory Service map onto the schema already created in step 2.
 
-### 4. Try the API
+### 4. Run Payment Service
 
-Import [`docs/api/OrderService.postman_collection.json`](docs/api/OrderService.postman_collection.json) into Postman, or use `src/OrderService/OrderService.API/OrderService.API.http` directly from VS Code or Visual Studio.
+```bash
+cd src/PaymentService/PaymentService.API
+dotnet run --launch-profile http
+```
 
-Note: `POST /api/orders` currently returns `503 Service Unavailable` by design — it validates stock against the Inventory Service before creating an order, and that service does not exist until Phase 2.
+Listens on `http://localhost:5033`, Swagger at `http://localhost:5033/swagger`.
+
+### 5. Run Inventory Service
+
+```bash
+cd src/InventoryService/InventoryService.API
+dotnet run --launch-profile http
+```
+
+Listens on `http://localhost:5225`, Swagger at `http://localhost:5225/swagger`.
+
+### 6. Try the full system
+
+Import the three collections in `docs/api/` into Postman (one per service — see [`docs/api/README.md`](docs/api/README.md)), or use each service's own `*.http` file from VS Code or Visual Studio.
+
+With all three services running:
+1. Create a product with Inventory Service's `Create Product` request.
+2. Create an order with Order Service's `Create Order` request, using that product's id.
+3. Within a few seconds, `GET /api/payments/{orderId}` on Payment Service shows the payment as `Succeeded` (or `Failed`, per the mock gateway rules), and the product's `reservedQuantity` on Inventory Service increases — both happen automatically, driven entirely by RabbitMQ events, with no further requests needed.
 
 ## Running Tests
 
 ```bash
-cd src/OrderService
-dotnet test
+cd src/OrderService && dotnet test
+cd src/PaymentService && dotnet test
+cd src/InventoryService && dotnet test
 ```
 
-38 tests: domain rules, application use cases, and HTTP integration tests running against a real, disposable PostgreSQL instance (Testcontainers).
+99 tests across the three services (38 Order, 25 Payment, 36 Inventory): domain rules, application use cases, consumer wiring (MassTransit's in-memory test harness), and HTTP integration tests running against a real, disposable PostgreSQL instance (Testcontainers) — including a concurrency test that races two orders for the last unit of stock.
 
 ## Project Structure
 
 ```
 /
 ├── src/
-│   ├── OrderService/       Order Service (implemented)
-│   ├── PaymentService/     Phase 2
-│   ├── InventoryService/   Phase 2
-│   ├── ApiGateway/         Phase 5
-│   └── Frontend/           Phase 4 (Angular)
+│   ├── OrderService/       Implemented (Phase 1)
+│   ├── PaymentService/     Implemented (Phase 2)
+│   ├── InventoryService/   Implemented (Phase 2)
+│   ├── ApiGateway/         Pending (Phase 5)
+│   └── Frontend/           Pending (Phase 4, Angular)
 ├── docs/
 │   ├── api/                Postman collection per service
 │   └── technical-exercise.md

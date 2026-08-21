@@ -1,0 +1,169 @@
+{
+  "info": {
+    "name": "Inventory Service",
+    "description": "REST API collection for Inventory Service (Phase 2).\n\nRequirements before using it:\n- Docker containers `orders-postgres` and `orders-rabbitmq` running.\n- API running: `cd src/InventoryService/InventoryService.API && dotnet run --launch-profile http` (listens on http://localhost:5225).\n\nRun 'Create Product' first: Order Service's stock check (`POST /api/orders`) and the whole saga depend on at least one product existing here. There is no REST endpoint to reserve stock directly - reservation happens automatically when Inventory Service consumes `PaymentProcessedEvent` from RabbitMQ, after Payment Service processes a payment successfully. A background service also releases any reservation not confirmed within 5 minutes (see CLAUDE.md, 'Key Design Decisions').\n\nNot JWT-protected yet: role-based authorization ('admin only' for 'Create Product' in the original exercise) starts in Phase 5.\n\nCollection variables: `baseUrl` (the API's URL) and `productId` (filled in automatically when running 'Create Product' with a successful response, so the rest of the requests can be chained without copying the id by hand).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5225", "type": "string" },
+    { "key": "productId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Create Product",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/products",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "products" ]
+        },
+        "description": "Adds a new product with its initial stock level.\n\nBusiness rules applied:\n- sku and name are required.\n- unitPrice must be greater than 0.\n- stockQuantity cannot be negative.\n\nNot restricted to administrators yet (JWT/roles are Phase 5). Successful response: 201 Created, with the product's 'Location' header pointing to GET /api/products/{id}.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"CAT-GYM-01\",\n  \"name\": \"Cat Tower XL\",\n  \"description\": \"5-level cat gym\",\n  \"unitPrice\": 89.99,\n  \"stockQuantity\": 10\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('productId', body.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "201 Created",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/products" } },
+          "status": "Created",
+          "code": 201,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"sku\": \"CAT-GYM-01\",\n  \"name\": \"Cat Tower XL\",\n  \"description\": \"5-level cat gym\",\n  \"unitPrice\": 89.99,\n  \"stockQuantity\": 10,\n  \"reservedQuantity\": 0,\n  \"availableQuantity\": 10,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:00Z\"\n}"
+        },
+        {
+          "name": "400 Bad Request (missing required field)",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/products" } },
+          "status": "Bad Request",
+          "code": 400,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"title\": \"One or more validation errors occurred.\",\n  \"status\": 400,\n  \"errors\": {\n    \"Sku\": [ \"The Sku field is required.\" ]\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get Product By Id",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/products/{{productId}}",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "products", "{{productId}}" ]
+        },
+        "description": "Returns a product's detail, including stock. availableQuantity is stockQuantity minus reservedQuantity - the number actually purchasable right now. Uses the {{productId}} collection variable, filled in automatically after running 'Create Product'."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/products/{{productId}}" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"sku\": \"CAT-GYM-01\",\n  \"name\": \"Cat Tower XL\",\n  \"description\": \"5-level cat gym\",\n  \"unitPrice\": 89.99,\n  \"stockQuantity\": 10,\n  \"reservedQuantity\": 2,\n  \"availableQuantity\": 8,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:05:40Z\"\n}"
+        },
+        {
+          "name": "404 Not Found",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/products/{{productId}}" } },
+          "status": "Not Found",
+          "code": 404,
+          "header": [],
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "List Products",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/products?page=1&pageSize=20",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "products" ],
+          "query": [
+            { "key": "page", "value": "1", "description": "Page number, 1-based." },
+            { "key": "pageSize", "value": "20", "description": "Page size (internally clamped between 1 and 100)." }
+          ]
+        },
+        "description": "Lists products with stock levels, paginated."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/products?page=1&pageSize=20" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"items\": [\n    {\n      \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n      \"sku\": \"CAT-GYM-01\",\n      \"name\": \"Cat Tower XL\",\n      \"description\": \"5-level cat gym\",\n      \"unitPrice\": 89.99,\n      \"stockQuantity\": 10,\n      \"reservedQuantity\": 2,\n      \"availableQuantity\": 8,\n      \"createdAt\": \"2026-08-19T18:00:00Z\",\n      \"updatedAt\": \"2026-08-19T18:05:40Z\"\n    }\n  ],\n  \"page\": 1,\n  \"pageSize\": 20,\n  \"totalCount\": 1\n}"
+        }
+      ]
+    },
+    {
+      "name": "Update Stock",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/products/{{productId}}/stock",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "products", "{{productId}}", "stock" ]
+        },
+        "description": "Sets the product's total stock quantity (a restock, not a delta). Business rule: the new value cannot be set below the quantity currently reserved by in-flight orders - doing so responds 409 Conflict.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"stockQuantity\": 50\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/products/{{productId}}/stock" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"sku\": \"CAT-GYM-01\",\n  \"name\": \"Cat Tower XL\",\n  \"description\": \"5-level cat gym\",\n  \"unitPrice\": 89.99,\n  \"stockQuantity\": 50,\n  \"reservedQuantity\": 2,\n  \"availableQuantity\": 48,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:10:00Z\"\n}"
+        },
+        {
+          "name": "409 Conflict (below reserved quantity)",
+          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/products/{{productId}}/stock" } },
+          "status": "Conflict",
+          "code": 409,
+          "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
+          "body": "{\n  \"status\": 409,\n  \"title\": \"Cannot set stock to 1 for 'CAT-GYM-01': 2 units are currently reserved.\"\n}"
+        },
+        {
+          "name": "404 Not Found",
+          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/products/{{productId}}/stock" } },
+          "status": "Not Found",
+          "code": 404,
+          "header": [],
+          "body": ""
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
+using IntegrationEvents;
 using MassTransit;
 using OrderService.Application.Abstractions;
-using OrderService.Application.IntegrationEvents;
 using OrderService.Domain;
 
 namespace OrderService.Infrastructure.Messaging;

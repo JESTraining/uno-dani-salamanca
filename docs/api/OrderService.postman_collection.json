@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Order Service",
-    "description": "REST API collection for Order Service (Phase 1).\n\nRequirements before using it:\n- Docker containers `orders-postgres` and `orders-rabbitmq` running.\n- API running: `cd src/OrderService/OrderService.API && dotnet run --launch-profile http` (listens on http://localhost:5290).\n\nNote: Inventory Service does not exist yet (arrives in Phase 2). Every order creation (`POST /api/orders`) responds 503 Service Unavailable until then, because Order Service validates stock against that service before creating the order. This is expected behavior, not a bug.\n\nCollection variables: `baseUrl` (the API's URL) and `orderId` (filled in automatically when running 'Create Order' with a successful response, so the rest of the requests can be chained without copying the id by hand).",
+    "description": "REST API collection for Order Service (Phase 1).\n\nRequirements before using it:\n- Docker containers `orders-postgres` and `orders-rabbitmq` running.\n- API running: `cd src/OrderService/OrderService.API && dotnet run --launch-profile http` (listens on http://localhost:5290).\n- Inventory Service also running (`docs/api/InventoryService.postman_collection.json`) with at least one product created - `POST /api/orders` validates stock against it before creating the order, and responds 503 Service Unavailable if it is unreachable. Payment Service (`docs/api/PaymentService.postman_collection.json`) should be running too, so a created order actually gets paid and its status changes automatically.\n\nCollection variables: `baseUrl` (the API's URL) and `orderId` (filled in automatically when running 'Create Order' with a successful response, so the rest of the requests can be chained without copying the id by hand).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -26,7 +26,7 @@
           "host": [ "{{baseUrl}}" ],
           "path": [ "api", "orders" ]
         },
-        "description": "Creates a new order. Validates stock availability against Inventory Service before creating the order (which is why it responds 503 while that service does not exist).\n\nBusiness rules applied:\n- At least one item is required in 'items'.\n- The total amount (sum of quantity * unitPrice across all items) must be greater than 0.\n- customerEmail must be a valid email format.\n\nSuccessful response: 201 Created, with the created order in 'Pending' status and the 'Location' header pointing to GET /api/orders/{id}.",
+        "description": "Creates a new order. Validates stock availability against Inventory Service before creating the order, so Inventory Service must be running with the requested product in stock (see the collection description).\n\nBusiness rules applied:\n- At least one item is required in 'items'.\n- The total amount (sum of quantity * unitPrice across all items) must be greater than 0.\n- customerEmail must be a valid email format.\n\nSuccessful response: 201 Created, with the created order in 'Pending' status and the 'Location' header pointing to GET /api/orders/{id}.",
         "body": {
           "mode": "raw",
           "raw": "{\n  \"customerId\": \"{{$guid}}\",\n  \"customerName\": \"Jane Doe\",\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"items\": [\n    {\n      \"productId\": \"{{$guid}}\",\n      \"productName\": \"Widget\",\n      \"quantity\": 2,\n      \"unitPrice\": 9.99\n    }\n  ]\n}",
@@ -57,7 +57,7 @@
           "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"customerId\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n  \"customerName\": \"Jane Doe\",\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"status\": \"Pending\",\n  \"totalAmount\": 19.98,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:00Z\",\n  \"items\": [\n    {\n      \"id\": \"b2c3d4e5-0000-0000-0000-000000000002\",\n      \"productId\": \"c3d4e5f6-0000-0000-0000-000000000003\",\n      \"productName\": \"Widget\",\n      \"quantity\": 2,\n      \"unitPrice\": 9.99,\n      \"subtotal\": 19.98\n    }\n  ]\n}"
         },
         {
-          "name": "503 Service Unavailable (Inventory Service does not exist yet)",
+          "name": "503 Service Unavailable (Inventory Service unreachable)",
           "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/orders" } },
           "status": "Service Unavailable",
           "code": 503,

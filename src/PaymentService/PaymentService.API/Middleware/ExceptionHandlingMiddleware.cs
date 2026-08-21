@@ -1,0 +1,45 @@
+using Microsoft.EntityFrameworkCore;
+using PaymentService.Domain;
+
+namespace PaymentService.API.Middleware;
+
+public class ExceptionHandlingMiddleware
+{
+    private readonly RequestDelegate _next;
+    private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+
+    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
+    {
+        _next = next;
+        _logger = logger;
+    }
+
+    public async Task InvokeAsync(HttpContext context)
+    {
+        try
+        {
+            await _next(context);
+        }
+        catch (InvalidPaymentOperationException ex)
+        {
+            await WriteProblemAsync(context, StatusCodes.Status409Conflict, ex.Message);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency conflict while updating a payment.");
+            await WriteProblemAsync(context, StatusCodes.Status409Conflict, "The payment was modified by another request. Please retry.");
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogWarning(ex, "Database constraint violation while updating a payment.");
+            await WriteProblemAsync(context, StatusCodes.Status409Conflict, "The operation conflicts with existing data (likely a duplicate).");
+        }
+    }
+
+    private static Task WriteProblemAsync(HttpContext context, int statusCode, string detail)
+    {
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/problem+json";
+        return context.Response.WriteAsJsonAsync(new { status = statusCode, title = detail });
+    }
+}

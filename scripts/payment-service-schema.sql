@@ -36,3 +36,12 @@ CREATE TABLE payment_transaction_logs (
 );
 
 CREATE INDEX ix_payment_transaction_logs_payment_id ON payment_transaction_logs (payment_id);
+
+-- This script runs as the postgres superuser, so it owns these tables.
+-- setup-databases.sql's "GRANT ALL ON SCHEMA public" only covers schema-level
+-- privileges (CREATE/USAGE), not table-level access to objects owned by a
+-- different role - without this, payment_service can connect to paymentdb
+-- but gets "permission denied for table payments" on every query.
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO payment_service;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO payment_service;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO payment_service;

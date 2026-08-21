@@ -2,6 +2,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using OrderService.API.Middleware;
 using OrderService.Application.Abstractions;
+using IntegrationEvents;
 using OrderService.Application.Services;
 using OrderService.Infrastructure.ExternalServices;
 using OrderService.Infrastructure.Messaging;
@@ -33,8 +34,18 @@ builder.Services.AddHttpClient<IInventoryAvailabilityChecker, InventoryHttpClien
 
 builder.Services.AddMassTransit(x =>
 {
+    // Exchange names default to the CLR type's full name (namespace +
+    // type). Each service keeps its own local copy of a shared event in
+    // its own namespace (see CLAUDE.md, "Established Architecture
+    // Pattern"), so without this, the publisher and a consumer in another
+    // service would bind to two different exchanges for "the same" event.
+    // SetEntityName pins the exchange name to the contract name alone,
+    // identical across every service that publishes or consumes it.
     x.UsingRabbitMq((context, cfg) =>
     {
+        cfg.Message<OrderCreatedEvent>(m => m.SetEntityName("OrderCreatedEvent"));
+        cfg.Message<OrderStatusChangedEvent>(m => m.SetEntityName("OrderStatusChangedEvent"));
+
         cfg.Host(builder.Configuration["RabbitMq:Host"], "/", h =>
         {
             h.Username(builder.Configuration["RabbitMq:Username"] ?? "guest");

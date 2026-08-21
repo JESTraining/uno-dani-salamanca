@@ -8,7 +8,7 @@ This repository implements the technical exercise "Full-Stack Microservices Exer
 
 ## Current Repository State
 
-Phase 1 is complete: the database schemas for all three services exist (`orderdb` via EF Core migrations, `paymentdb` and `inventorydb` via the scripts in `scripts/`) and Order Service is implemented end-to-end in `src/OrderService/` (REST API, EF Core, RabbitMQ, 38 automated tests passing). Payment Service, Inventory Service, API Gateway, Frontend, and Docker infrastructure do not exist yet.
+Phases 1 and 2 are complete: all three core services (Order, Payment, Inventory) are implemented end-to-end in `src/` (REST APIs, EF Core against their pre-existing schemas, RabbitMQ publishers and consumers) and verified together against real RabbitMQ and PostgreSQL - creating an order through Order Service triggers payment processing and, on success, inventory reservation, with no manual intervention. 99 automated tests passing across the three services (38 Order, 25 Payment, 36 Inventory). API Gateway, Frontend, and Docker infrastructure do not exist yet.
 
 This summary is updated at the close of each phase, but it may fall out of date between sessions. Any agent must verify the real state using the repository's own search tools before assuming something is or is not implemented.
 
@@ -37,6 +37,13 @@ This file (`CLAUDE.md`) acts as the project's status board: the "Current Reposit
   | `OrderStatusChangedEvent` | OrderId, PreviousStatus, NewStatus, Timestamp |
 
   `OrderStatusChangedEvent` is not in the original exercise statement: it was added in Phase 1 because Order Service publishes an event on every status change (not only on creation), and the original contract only covered creation and completion. Implemented in `OrderService.Application.IntegrationEvents`. If an agent needs to add a field or a new event, it must update this table in the same change — do not let code and documentation drift apart.
+
+  **Two separate MassTransit rules are mandatory for every event in this table, in every service that publishes or consumes it** (both were found the hard way in Phase 2 - the first alone was not enough):
+
+  1. **Exchange naming:** `cfg.Message<TEvent>(m => m.SetEntityName("EventTypeName"))` in the `UsingRabbitMq` block, using the bare event name (no namespace) as the string, identical across services. MassTransit's default exchange name is the CLR type's full name including namespace, so without this, each service's local copy of a shared event would silently get its *own* exchange, and a publisher in one service would never reach a consumer in another.
+  2. **Namespace of the local contract copy:** every service's local copy of a shared event (see "Established Architecture Pattern") must live in a bare `namespace IntegrationEvents;` — not `<Service>.Application.IntegrationEvents`. MassTransit's JSON envelope tags each message with a type URN built from CLR namespace + type name (`urn:message:{Namespace}:{TypeName}`), independent of the exchange name, and a consumer only binds to a message whose URN matches a *locally known* type. With per-service namespaces, rule 1 alone still routes the message to the right queue, but the consumer then rejects it as an unrecognized type and RabbitMQ moves it to a `<queue>_skipped` dead-letter queue - no exception, no log on the publishing side, the message just silently vanishes from the consumer's point of view.
+
+  Symptom when either rule is missed: the publish call succeeds and the integration/consumer tests (which use MassTransit's in-memory `ITestHarness`, a single fake bus with no cross-service exchange or namespace mismatch) still pass, but nothing happens end-to-end against real RabbitMQ. Verify both with `docker exec orders-rabbitmq rabbitmqctl list_exchanges name type` (exactly one exchange per event name) and `docker exec orders-rabbitmq rabbitmqctl list_queues name messages consumers` (watch for unexpected `_skipped` queues accumulating messages).
 
 - **The Saga pattern governs the entire order flow** (creation, payment, inventory reservation, completion or compensation). No implementation may introduce an alternate path that completes an order without going through the described Saga flow.
 - **Idempotency is mandatory** for order creation and payment processing. Every event handler must be idempotent (reprocessing the same event twice must not duplicate effects).
@@ -71,14 +78,15 @@ Do not change these choices without explicit confirmation from the user:
 - Commit messages must be descriptive and in English, preferably in Conventional Commits format (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
 - In DTOs defined as `record` with a primary constructor, validation attributes (`[Required]`, `[MaxLength]`, `[Range]`, etc.) go directly on the parameter, without the `[property: ...]` prefix. With `property:`, ASP.NET Core throws an `InvalidOperationException` at runtime ("validation metadata defined on property... must be associated with the constructor parameter") instead of returning 400. See `OrderService.Application/Contracts/OrderDtos.cs`.
 
-## Established Architecture Pattern (replicate in Payment and Inventory Service)
+## Established Architecture Pattern (Order, Payment, and Inventory Service)
 
-Order Service (Phase 1, in `src/OrderService/`) sets the pattern that Payment Service and Inventory Service must follow in Phase 2, so that all three services stay consistent:
+Order Service (Phase 1) set the pattern; Payment Service and Inventory Service (Phase 2) followed it, so all three services stay consistent. Any future service (API Gateway, Phase 5) should follow it too where it applies:
 
-- Five projects per service: `<Service>.Domain` (entities and business rules as methods, no public setters), `<Service>.Application` (DTOs in `Contracts/`, interfaces in `Abstractions/`, use cases in `Services/`, integration events in `IntegrationEvents/`, exceptions in `Exceptions/`), `<Service>.Infrastructure` (`DbContext` and EF Core configurations in `Persistence/`, event publisher in `Messaging/`, outbound HTTP clients in `ExternalServices/`), `<Service>.API` (`Controllers/`, `Middleware/`, `Program.cs`), `<Service>.Tests` (subfolders `Domain/`, `Application/`, `Unit/`, `Integration/`).
-- Centralized error handling in an `ExceptionHandlingMiddleware` per service, translating domain/application exceptions into HTTP status codes (404 not found, 409 state or concurrency conflict, 422 business rule violation, 503 external dependency unavailable). Do not repeat `try/catch` in every controller.
-- Idempotency via the `Idempotency-Key` header, with a dedicated table (`idempotency_keys` in Order Service) whose commit happens in the same transaction as the main operation (same `SaveChangesAsync`), not in a separate step.
-- Integration tests with `WebApplicationFactory` + `Testcontainers.PostgreSql` (a real, ephemeral database), replacing in `CustomWebApplicationFactory` only the dependencies on external services that do not exist yet or should not be spun up in the test (see `AlwaysAvailableInventoryChecker` in `OrderService.Tests`).
+- Five projects per service: `<Service>.Domain` (entities and business rules as methods, no public setters), `<Service>.Application` (DTOs in `Contracts/`, interfaces in `Abstractions/`, use cases in `Services/`, integration events in `IntegrationEvents/`, exceptions in `Exceptions/`), `<Service>.Infrastructure` (`DbContext` and EF Core configurations in `Persistence/`, event publisher and consumers in `Messaging/`, outbound HTTP clients in `ExternalServices/`, background services in `BackgroundServices/`), `<Service>.API` (`Controllers/`, `Middleware/`, `Program.cs`), `<Service>.Tests` (subfolders `Domain/`, `Application/`, `Unit/`, `Integration/`).
+- Centralized error handling in an `ExceptionHandlingMiddleware` per service, translating domain/application exceptions into HTTP status codes (404 not found, 409 state or concurrency conflict, 422 business rule violation, 503 external dependency unavailable). Do not repeat `try/catch` in every controller. EF Core's `DbUpdateConcurrencyException` should not leak past Infrastructure - translate it into an Application-level exception there (see `ConcurrencyConflictException` in `InventoryService.Application.Exceptions`) so Application stays free of EF Core-specific types and the same exception works for both HTTP-triggered and internal (event-driven) concurrency retries.
+- Idempotency approach depends on how the operation is triggered, not a single copy-pasted mechanism: Order Service's client-initiated `POST /api/orders` uses the `Idempotency-Key` header with a dedicated table (`idempotency_keys`), committed in the same transaction as the main operation. Payment Service and Inventory Service's operations are event-triggered and scoped to one order, so idempotency there is simpler: a unique DB constraint (`payments.order_id`; `inventory_reservations.(order_id, product_id)`) plus an existence check before acting - no separate key table needed.
+- Integration tests with `WebApplicationFactory` + `Testcontainers.PostgreSql` (a real, ephemeral database), replacing in `CustomWebApplicationFactory` only the dependencies on external services that do not exist yet or should not be spun up in the test (see `AlwaysAvailableInventoryChecker` in `OrderService.Tests`). Services with no EF Core migration (Payment, Inventory - see "Key Design Decisions") apply their tracked `scripts/*.sql` file directly against the test container instead of migrating, stripping the `GRANT`/`ALTER DEFAULT PRIVILEGES` lines first since the role they target only exists in the real `orders-postgres` container, not in the disposable test one.
+- Consumer wiring (first introduced in Phase 2) gets its own test using MassTransit's in-memory `AddMassTransitTestHarness`, asserting the consumer both fires and calls the right method with the right arguments - `PaymentManager`/`ReservationManager` tests alone would not catch a wiring mistake.
 
 ## Critical Business Rules (must never be violated)
 
@@ -159,8 +167,8 @@ Same tree as the "Suggested Folder Structure" section of `docs/technical-exercis
 /
 ├── src/
 │   ├── OrderService/       (Phase 1 - implemented: Domain/Application/Infrastructure/API/Tests)
-│   ├── PaymentService/     (Phase 2 - pending)
-│   ├── InventoryService/   (Phase 2 - pending)
+│   ├── PaymentService/     (Phase 2 - implemented, same layered structure)
+│   ├── InventoryService/   (Phase 2 - implemented, same layered structure)
 │   ├── ApiGateway/         (Phase 5 - pending)
 │   └── Frontend/           (Phase 4 - pending, Angular)
 ├── docker/                 (Phase 5 - pending)
@@ -175,4 +183,4 @@ Same tree as the "Suggested Folder Structure" section of `docs/technical-exercis
 └── README.md               (public presentation of the project, not the specification)
 ```
 
-`CLAUDE.md`, `.gitignore`, `scripts/`, `docs/api/`, `docs/technical-exercise.md`, and `src/OrderService/` already exist. The rest of the structure is built incrementally, phase by phase.
+`CLAUDE.md`, `.gitignore`, `scripts/`, `docs/api/`, `docs/technical-exercise.md`, and all three of `src/OrderService/`, `src/PaymentService/`, `src/InventoryService/` already exist. The rest of the structure is built incrementally, phase by phase.
