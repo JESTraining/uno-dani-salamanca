@@ -77,4 +77,77 @@ public class Order
         Status = newStatus;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    // The five methods below drive the choreographed saga (Phase 3). Each is
+    // idempotent by design: a no-op if the order already reached or passed the
+    // target status (safe against MassTransit's at-least-once redelivery), and
+    // throws only for a genuinely out-of-sequence transition, which is a real
+    // saga bug worth surfacing rather than swallowing. They are intentionally
+    // separate from Cancel()/ChangeStatus() above, which remain reserved for
+    // user-initiated and admin-initiated transitions respectively.
+
+    public void StartPaymentProcessing()
+    {
+        if (Status == OrderStatus.PaymentProcessing)
+            return;
+
+        if (Status != OrderStatus.Pending)
+            throw new InvalidOrderOperationException(
+                $"Order in status '{Status}' cannot start payment processing. Only orders in 'Pending' can.");
+
+        Status = OrderStatus.PaymentProcessing;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void MarkPaymentProcessed()
+    {
+        if (Status is OrderStatus.InventoryProcessing or OrderStatus.Completed or OrderStatus.InventoryFailed)
+            return;
+
+        if (Status != OrderStatus.PaymentProcessing)
+            throw new InvalidOrderOperationException(
+                $"Order in status '{Status}' cannot be marked as payment processed. Expected 'PaymentProcessing'.");
+
+        Status = OrderStatus.InventoryProcessing;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void MarkPaymentFailed()
+    {
+        if (Status == OrderStatus.PaymentFailed)
+            return;
+
+        if (Status != OrderStatus.PaymentProcessing)
+            throw new InvalidOrderOperationException(
+                $"Order in status '{Status}' cannot be marked as payment failed. Expected 'PaymentProcessing'.");
+
+        Status = OrderStatus.PaymentFailed;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void Complete()
+    {
+        if (Status == OrderStatus.Completed)
+            return;
+
+        if (Status != OrderStatus.InventoryProcessing)
+            throw new InvalidOrderOperationException(
+                $"Order in status '{Status}' cannot be completed. Expected 'InventoryProcessing'.");
+
+        Status = OrderStatus.Completed;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void MarkInventoryFailed()
+    {
+        if (Status == OrderStatus.InventoryFailed)
+            return;
+
+        if (Status != OrderStatus.InventoryProcessing)
+            throw new InvalidOrderOperationException(
+                $"Order in status '{Status}' cannot be marked as inventory failed. Expected 'InventoryProcessing'.");
+
+        Status = OrderStatus.InventoryFailed;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

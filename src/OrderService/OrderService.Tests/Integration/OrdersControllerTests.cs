@@ -29,7 +29,8 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
         var fetched = await getResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
         Assert.Equal(created.Id, fetched!.Id);
-        Assert.Equal("Pending", fetched.Status);
+        // Saga kickoff: creation synchronously advances Pending -> PaymentProcessing.
+        Assert.Equal("PaymentProcessing", fetched.Status);
         Assert.Single(fetched.Items);
     }
 
@@ -74,7 +75,7 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
-    public async Task DeleteOrder_WhilePending_CancelsIt()
+    public async Task DeleteOrder_WhilePaymentProcessing_CancelsIt()
     {
         var createResponse = await _client.PostAsJsonAsync("/api/orders", ValidRequest());
         var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();

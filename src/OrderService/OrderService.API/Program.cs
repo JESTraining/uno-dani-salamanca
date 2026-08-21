@@ -34,6 +34,13 @@ builder.Services.AddHttpClient<IInventoryAvailabilityChecker, InventoryHttpClien
 
 builder.Services.AddMassTransit(x =>
 {
+    // Choreographed saga (Phase 3): Order Service reacts to the outcomes
+    // Payment/Inventory Service publish, same reactive style they already use.
+    x.AddConsumer<PaymentProcessedConsumer>();
+    x.AddConsumer<PaymentFailedConsumer>();
+    x.AddConsumer<InventoryReservedConsumer>();
+    x.AddConsumer<InventoryFailedConsumer>();
+
     // Exchange names default to the CLR type's full name (namespace +
     // type). Each service keeps its own local copy of a shared event in
     // its own namespace (see CLAUDE.md, "Established Architecture
@@ -45,12 +52,31 @@ builder.Services.AddMassTransit(x =>
     {
         cfg.Message<OrderCreatedEvent>(m => m.SetEntityName("OrderCreatedEvent"));
         cfg.Message<OrderStatusChangedEvent>(m => m.SetEntityName("OrderStatusChangedEvent"));
+        cfg.Message<OrderCompletedEvent>(m => m.SetEntityName("OrderCompletedEvent"));
+        cfg.Message<PaymentProcessedEvent>(m => m.SetEntityName("PaymentProcessedEvent"));
+        cfg.Message<PaymentFailedEvent>(m => m.SetEntityName("PaymentFailedEvent"));
+        cfg.Message<InventoryReservedEvent>(m => m.SetEntityName("InventoryReservedEvent"));
+        cfg.Message<InventoryFailedEvent>(m => m.SetEntityName("InventoryFailedEvent"));
 
         cfg.Host(builder.Configuration["RabbitMq:Host"], "/", h =>
         {
             h.Username(builder.Configuration["RabbitMq:Username"] ?? "guest");
             h.Password(builder.Configuration["RabbitMq:Password"] ?? "guest");
         });
+
+        // Task 3.1: 3 retries with exponential backoff before MassTransit's
+        // RabbitMQ transport moves the message to the receive endpoint's
+        // automatically-created "<queue>_error" dead-letter queue.
+        cfg.UseMessageRetry(r => r.Exponential(
+            3,
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(5)));
+
+        cfg.ReceiveEndpoint("order-service-payment-processed", e => e.ConfigureConsumer<PaymentProcessedConsumer>(context));
+        cfg.ReceiveEndpoint("order-service-payment-failed", e => e.ConfigureConsumer<PaymentFailedConsumer>(context));
+        cfg.ReceiveEndpoint("order-service-inventory-reserved", e => e.ConfigureConsumer<InventoryReservedConsumer>(context));
+        cfg.ReceiveEndpoint("order-service-inventory-failed", e => e.ConfigureConsumer<InventoryFailedConsumer>(context));
     });
 });
 

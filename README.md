@@ -60,12 +60,12 @@ Each service owns its own database exclusively; there is no shared schema or cro
 |---|---|---|
 | 1 | Database schemas (all services) + Order Service | Complete |
 | 2 | Payment Service + Inventory Service | Complete |
-| 3 | RabbitMQ event contracts + Saga pattern | Pending |
+| 3 | RabbitMQ event contracts + Saga pattern | Complete |
 | 4 | Frontend (Angular) | Pending |
 | 5 | Docker Compose + production readiness | Pending |
 | 6 | Full test suite + documentation | Pending |
 
-All three core services (Order, Payment, Inventory) are implemented end-to-end and verified together against real RabbitMQ and PostgreSQL: creating an order automatically triggers payment processing and, on success, inventory reservation, with no manual steps in between. 99 automated tests passing across the three services. The API Gateway, the frontend, and the Docker setup do not exist yet.
+All three core services (Order, Payment, Inventory) are implemented end-to-end and verified together against real RabbitMQ and PostgreSQL. Creating an order automatically triggers payment processing and, on success, inventory reservation - and the saga now closes the loop back to Order Service, which reacts to the payment/inventory outcome and drives the order all the way to `Completed` (or a `PaymentFailed`/`InventoryFailed` terminal state), with no manual steps anywhere in the flow. Every consumer across all three services retries 3 times with exponential backoff before a failed message is dead-lettered. 153 automated tests passing across the three services. The API Gateway, the frontend, and the Docker setup do not exist yet.
 
 ## Getting Started
 
@@ -132,7 +132,7 @@ Import the three collections in `docs/api/` into Postman (one per service — se
 With all three services running:
 1. Create a product with Inventory Service's `Create Product` request.
 2. Create an order with Order Service's `Create Order` request, using that product's id.
-3. Within a few seconds, `GET /api/payments/{orderId}` on Payment Service shows the payment as `Succeeded` (or `Failed`, per the mock gateway rules), and the product's `reservedQuantity` on Inventory Service increases — both happen automatically, driven entirely by RabbitMQ events, with no further requests needed.
+3. Poll `GET /api/orders/{id}` on Order Service over the next few seconds: the order moves from `PaymentProcessing` to `InventoryProcessing` to `Completed` (or lands in `PaymentFailed`/`InventoryFailed`, per the mock gateway rules and available stock) — entirely automatic, driven by RabbitMQ events, with no further requests needed. `GET /api/payments/{orderId}` on Payment Service and the product's `reservedQuantity` on Inventory Service reflect the same outcome along the way.
 
 ## Running Tests
 
@@ -142,7 +142,7 @@ cd src/PaymentService && dotnet test
 cd src/InventoryService && dotnet test
 ```
 
-99 tests across the three services (38 Order, 25 Payment, 36 Inventory): domain rules, application use cases, consumer wiring (MassTransit's in-memory test harness), and HTTP integration tests running against a real, disposable PostgreSQL instance (Testcontainers) — including a concurrency test that races two orders for the last unit of stock.
+153 tests across the three services (92 Order, 25 Payment, 36 Inventory): domain rules, application use cases, consumer wiring (MassTransit's in-memory test harness), end-to-end in-memory saga flow tests covering every branch (success and both failure paths) plus duplicate-event idempotency, a retry/dead-letter exhaustion test, and HTTP integration tests running against a real, disposable PostgreSQL instance (Testcontainers) — including a concurrency test that races two orders for the last unit of stock.
 
 ## Project Structure
 

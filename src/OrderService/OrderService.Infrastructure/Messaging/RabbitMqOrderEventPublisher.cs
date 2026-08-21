@@ -40,4 +40,11 @@ public class RabbitMqOrderEventPublisher : IOrderEventPublisher
 
         return _publishEndpoint.Publish(@event, cancellationToken);
     }
+
+    public Task PublishOrderCompletedAsync(Guid orderId, OrderStatus status, CancellationToken cancellationToken)
+    {
+        var @event = new OrderCompletedEvent(orderId, status.ToString(), DateTime.UtcNow);
+
+        return _publishEndpoint.Publish(@event, cancellationToken);
+    }
 }

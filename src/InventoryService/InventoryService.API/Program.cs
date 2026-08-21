@@ -50,6 +50,15 @@ builder.Services.AddMassTransit(x =>
             h.Password(builder.Configuration["RabbitMq:Password"] ?? "guest");
         });
 
+        // Task 3.1: 3 retries with exponential backoff before MassTransit's
+        // RabbitMQ transport moves the message to the receive endpoint's
+        // automatically-created "<queue>_error" dead-letter queue.
+        cfg.UseMessageRetry(r => r.Exponential(
+            3,
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(5)));
+
         cfg.ReceiveEndpoint("inventory-service-order-created", e =>
         {
             e.ConfigureConsumer<OrderCreatedConsumer>(context);

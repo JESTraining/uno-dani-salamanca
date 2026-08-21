@@ -11,4 +11,6 @@ public interface IOrderEventPublisher
         OrderStatus previousStatus,
         OrderStatus newStatus,
         CancellationToken cancellationToken);
+
+    Task PublishOrderCompletedAsync(Guid orderId, OrderStatus status, CancellationToken cancellationToken);
 }

@@ -14,4 +14,14 @@ public interface IOrderManager
     Task<OrderResponse> UpdateStatusAsync(Guid id, OrderStatus newStatus, CancellationToken cancellationToken);
 
     Task<OrderResponse> CancelOrderAsync(Guid id, CancellationToken cancellationToken);
+
+    // Saga-driven transitions (Phase 3, choreography) - invoked only from
+    // RabbitMQ consumers, never exposed over HTTP.
+    Task MarkPaymentProcessedAsync(Guid orderId, CancellationToken cancellationToken);
+
+    Task MarkPaymentFailedAsync(Guid orderId, string reason, CancellationToken cancellationToken);
+
+    Task CompleteOrderAsync(Guid orderId, CancellationToken cancellationToken);
+
+    Task MarkInventoryFailedAsync(Guid orderId, string reason, CancellationToken cancellationToken);
 }

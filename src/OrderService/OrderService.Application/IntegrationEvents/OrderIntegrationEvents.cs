@@ -26,3 +26,37 @@ public sealed record OrderStatusChangedEvent(
     string PreviousStatus,
     string NewStatus,
     DateTime Timestamp);
+
+/// Wire contract fixed in CLAUDE.md ("Architecture: Non-Negotiable Rules"). Published
+/// by Order Service once the saga reaches its Completed terminal state.
+public sealed record OrderCompletedEvent(
+    Guid OrderId,
+    string Status,
+    DateTime Timestamp);
+
+// Local copies of events published by Payment/Inventory Service and consumed
+// here to drive the choreographed saga (Phase 3). Shapes must match the
+// publishing service's own copy exactly - see the namespace note above.
+
+public sealed record PaymentProcessedEvent(
+    Guid OrderId,
+    Guid TransactionId,
+    decimal Amount,
+    DateTime Timestamp);
+
+public sealed record PaymentFailedEvent(
+    Guid OrderId,
+    string Reason,
+    DateTime Timestamp);
+
+public sealed record InventoryReservedEvent(
+    Guid OrderId,
+    IReadOnlyCollection<InventoryReservedEventItem> Items,
+    DateTime Timestamp);
+
+public sealed record InventoryReservedEventItem(Guid ProductId, int Quantity);
+
+public sealed record InventoryFailedEvent(
+    Guid OrderId,
+    string Reason,
+    DateTime Timestamp);
