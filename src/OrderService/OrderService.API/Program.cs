@@ -23,7 +23,28 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
 builder.Services.AddScoped<IOrderManager, OrderManager>();
-builder.Services.AddScoped<IOrderEventPublisher, RabbitMqOrderEventPublisher>();
+
+builder.Services.AddSignalR();
+
+// IOrderEventPublisher fans out to both RabbitMQ and SignalR (Phase 4) via
+// a composite. Registered as a factory rather than IEnumerable<IOrderEventPublisher>
+// to avoid the composite recursively resolving itself.
+builder.Services.AddScoped<RabbitMqOrderEventPublisher>();
+builder.Services.AddScoped<SignalROrderEventPublisher>();
+builder.Services.AddScoped<IOrderEventPublisher>(sp => new CompositeOrderEventPublisher(
+    sp.GetRequiredService<RabbitMqOrderEventPublisher>(),
+    sp.GetRequiredService<SignalROrderEventPublisher>()));
+
+builder.Services.AddCors(options =>
+{
+    // Phase 4: the frontend calls this service directly (no API Gateway
+    // yet, that is Phase 5) - see CLAUDE.md, "Architecture: Non-Negotiable
+    // Rules" for the documented interim exception.
+    options.AddPolicy("AllowFrontend", policy => policy
+        .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+        .AllowAnyHeader()
+        .AllowAnyMethod());
+});
 
 builder.Services.AddHttpClient<IInventoryAvailabilityChecker, InventoryHttpClient>(client =>
 {
@@ -90,7 +111,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
+app.UseCors("AllowFrontend");
 app.MapControllers();
+app.MapHub<OrderHub>("/hubs/orders");
 
 app.Run();
 

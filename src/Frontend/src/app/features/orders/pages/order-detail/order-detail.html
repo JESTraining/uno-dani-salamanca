@@ -1,0 +1,92 @@
+@if (loading()) {
+  <div class="order-detail order-detail--loading">
+    <app-loading-skeleton [rows]="8" rowHeight="1.5rem" />
+  </div>
+} @else if (order(); as order) {
+  <div class="order-detail">
+    <div class="order-detail__header">
+      <div>
+        <h1>Order {{ order.id }}</h1>
+        <app-order-status-badge [status]="order.status" />
+      </div>
+      @if (canCancel()) {
+        <button mat-stroked-button color="warn" (click)="cancelOrder()">
+          <mat-icon>cancel</mat-icon>
+          Cancel Order
+        </button>
+      }
+    </div>
+
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Status Timeline</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        @if (isFailure(order.status)) {
+          <p class="order-detail__failure-note">
+            This order did not complete the normal flow - it stopped at <strong>{{ order.status }}</strong>.
+          </p>
+        }
+        <ol class="order-detail__timeline">
+          @for (step of sagaSequence; track step) {
+            <li [class]="'order-detail__timeline-step order-detail__timeline-step--' + timelineStepState(step)">
+              {{ step }}
+            </li>
+          }
+        </ol>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Items</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <mat-list>
+          @for (item of order.items; track item.id) {
+            <mat-list-item>
+              <span matListItemTitle>{{ item.productName }} × {{ item.quantity }}</span>
+              <span matListItemLine>{{ item.subtotal | number: '1.2-2' }}</span>
+            </mat-list-item>
+          }
+        </mat-list>
+        <div class="order-detail__total">Total: {{ order.totalAmount | number: '1.2-2' }}</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Customer</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p>{{ order.customerName }}</p>
+        <p>{{ order.customerEmail }}</p>
+        <p class="order-detail__muted">Created {{ order.createdAt | date: 'medium' }}</p>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Payment</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        @if (paymentLoading()) {
+          <app-loading-skeleton [rows]="2" />
+        } @else if (payment(); as payment) {
+          <p>Status: <strong>{{ payment.status }}</strong></p>
+          <p>Amount: {{ payment.amount | number: '1.2-2' }}</p>
+          @if (payment.transactionId) {
+            <p class="order-detail__muted">Transaction {{ payment.transactionId }}</p>
+          }
+          @if (payment.failureReason) {
+            <p class="order-detail__failure-note">{{ payment.failureReason }}</p>
+          }
+        } @else {
+          <p class="order-detail__muted">No payment has been recorded yet for this order.</p>
+        }
+      </mat-card-content>
+    </mat-card>
+  </div>
+} @else {
+  <p class="order-detail__not-found">Order not found.</p>
+}

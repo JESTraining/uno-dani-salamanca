@@ -1,0 +1,91 @@
+<mat-card class="order-create">
+  <mat-card-header>
+    <mat-card-title>New Order</mat-card-title>
+  </mat-card-header>
+
+  <mat-card-content>
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <div class="order-create__customer">
+        <mat-form-field appearance="outline">
+          <mat-label>Customer name</mat-label>
+          <input matInput formControlName="customerName" />
+          @if (form.controls.customerName.invalid && form.controls.customerName.touched) {
+            <mat-error>Customer name is required.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Customer email</mat-label>
+          <input matInput type="email" formControlName="customerEmail" />
+          @if (form.controls.customerEmail.invalid && form.controls.customerEmail.touched) {
+            <mat-error>A valid email is required.</mat-error>
+          }
+        </mat-form-field>
+      </div>
+
+      <h3>Items</h3>
+      <div formArrayName="items" class="order-create__items">
+        @for (item of items.controls; track $index; let i = $index) {
+          <div [formGroupName]="i" class="order-create__item">
+            <mat-form-field appearance="outline">
+              <mat-label>Product</mat-label>
+              <mat-select formControlName="productId">
+                @for (product of products(); track product.id) {
+                  <mat-option [value]="product.id" [disabled]="product.availableQuantity === 0">
+                    {{ product.name }} ({{ product.availableQuantity }} available)
+                  </mat-option>
+                }
+              </mat-select>
+              @if (item.controls.productId.invalid && item.controls.productId.touched) {
+                <mat-error>Select a product.</mat-error>
+              }
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Quantity</mat-label>
+              <input matInput type="number" min="1" formControlName="quantity" />
+              @if (item.controls.quantity.hasError('insufficientStock')) {
+                <mat-error>
+                  Only {{ item.controls.quantity.errors?.['insufficientStock'].available }} unit(s) available.
+                </mat-error>
+              }
+            </mat-form-field>
+
+            <span class="order-create__subtotal">{{ subtotalFor(i) | number: '1.2-2' }}</span>
+
+            <button
+              mat-icon-button
+              type="button"
+              [disabled]="items.length === 1"
+              (click)="removeItem(i)"
+              aria-label="Remove item"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        }
+      </div>
+
+      <button mat-stroked-button type="button" (click)="addItem()">
+        <mat-icon>add</mat-icon>
+        Add item
+      </button>
+
+      <div class="order-create__total">Total: {{ total | number: '1.2-2' }}</div>
+
+      @if (error()) {
+        <p class="order-create__error">{{ error() }}</p>
+      }
+
+      <div class="order-create__actions">
+        <button mat-flat-button color="primary" type="submit" [disabled]="creating()">
+          @if (creating()) {
+            <mat-progress-spinner diameter="20" mode="indeterminate" />
+          } @else {
+            Create Order
+          }
+        </button>
+      </div>
+    </form>
+  </mat-card-content>
+</mat-card>

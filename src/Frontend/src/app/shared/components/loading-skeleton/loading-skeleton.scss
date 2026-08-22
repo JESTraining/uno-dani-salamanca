@@ -1,0 +1,21 @@
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  &__row {
+    border-radius: 4px;
+    background: var(--mat-sys-surface-container-high);
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+}
