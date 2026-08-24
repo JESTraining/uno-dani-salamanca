@@ -1,0 +1,47 @@
+# Applied automatically by `docker compose up` alongside docker-compose.yml
+# (Compose merges any docker-compose.override.yml found next to it). Targets
+# each Dockerfile's SDK-based build stage instead of the published runtime
+# image, and mounts the local source over the image's baked-in copy so
+# `dotnet watch` / `ng serve` picks up live edits - Task 5.1's hot-reload
+# requirement. Remove this file (or `docker compose -f docker-compose.yml up`
+# explicitly) to run the production images instead.
+
+services:
+  order-service:
+    build:
+      target: build
+    volumes:
+      - ../src/OrderService:/src
+    command: ["dotnet", "watch", "run", "--project", "OrderService.API", "--urls", "http://+:8080", "--no-launch-profile"]
+
+  payment-service:
+    build:
+      target: build
+    volumes:
+      - ../src/PaymentService:/src
+    command: ["dotnet", "watch", "run", "--project", "PaymentService.API", "--urls", "http://+:8080", "--no-launch-profile"]
+
+  inventory-service:
+    build:
+      target: build
+    volumes:
+      - ../src/InventoryService:/src
+    command: ["dotnet", "watch", "run", "--project", "InventoryService.API", "--urls", "http://+:8080", "--no-launch-profile"]
+
+  api-gateway:
+    build:
+      target: build
+    volumes:
+      - ../src/ApiGateway:/src
+    command: ["dotnet", "watch", "run", "--project", "ApiGateway.API", "--urls", "http://+:8080", "--no-launch-profile"]
+
+  frontend:
+    build:
+      target: dev
+    volumes:
+      - ../src/Frontend:/app
+      - /app/node_modules
+    # No "ports" override here: the dev stage's `ng serve` binds container
+    # port 80 (see Frontend/Dockerfile), matching the base file's "4200:80"
+    # mapping. Compose concatenates (not replaces) list fields on override,
+    # so redeclaring "ports" here would add a second, conflicting mapping.

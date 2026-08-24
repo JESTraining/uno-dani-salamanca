@@ -75,9 +75,15 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
     /// this Testcontainers instance, which the tests connect to directly as
     /// postgres - already the owner with full access - so those statements
     /// would just fail here and are stripped before executing the rest.
+    /// The script's leading "\c paymentdb" (Phase 5, needed for the same
+    /// script to also work unmodified as a Docker init script - see the
+    /// script's own header comment) is a psql meta-command, not SQL; it is
+    /// stripped too since ExecuteSqlRawAsync sends raw SQL directly to the
+    /// server, bypassing psql's own meta-command handling.
     private static string RemoveRolePrivilegeStatements(string script) =>
         string.Join('\n', script
             .Split('\n')
             .Where(line => !line.TrimStart().StartsWith("GRANT ", StringComparison.OrdinalIgnoreCase)
-                         && !line.TrimStart().StartsWith("ALTER DEFAULT PRIVILEGES", StringComparison.OrdinalIgnoreCase)));
+                         && !line.TrimStart().StartsWith("ALTER DEFAULT PRIVILEGES", StringComparison.OrdinalIgnoreCase)
+                         && !line.TrimStart().StartsWith(@"\c ", StringComparison.OrdinalIgnoreCase)));
 }

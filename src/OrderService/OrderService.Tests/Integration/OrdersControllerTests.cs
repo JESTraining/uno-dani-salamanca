@@ -20,11 +20,11 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task CreateOrder_ThenGetById_ReturnsTheSameOrder()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/orders", ValidRequest());
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/orders", ValidRequest());
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
-        var getResponse = await _client.GetAsync($"/api/orders/{created!.Id}");
+        var getResponse = await _client.GetAsync($"/api/v1/orders/{created!.Id}");
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         var fetched = await getResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
@@ -40,12 +40,12 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
         var key = Guid.NewGuid().ToString();
         var request = ValidRequest();
 
-        var first = new HttpRequestMessage(HttpMethod.Post, "/api/orders") { Content = JsonContent.Create(request) };
+        var first = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orders") { Content = JsonContent.Create(request) };
         first.Headers.Add("Idempotency-Key", key);
         var firstResponse = await _client.SendAsync(first);
         var firstOrder = await firstResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
-        var second = new HttpRequestMessage(HttpMethod.Post, "/api/orders") { Content = JsonContent.Create(request) };
+        var second = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orders") { Content = JsonContent.Create(request) };
         second.Headers.Add("Idempotency-Key", key);
         var secondResponse = await _client.SendAsync(second);
         var secondOrder = await secondResponse.Content.ReadFromJsonAsync<OrderResponse>();
@@ -58,7 +58,7 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
     {
         var invalidRequest = new CreateOrderRequest(Guid.NewGuid(), "Jane Doe", "jane@example.com", Array.Empty<CreateOrderItemRequest>());
 
-        var response = await _client.PostAsJsonAsync("/api/orders", invalidRequest);
+        var response = await _client.PostAsJsonAsync("/api/v1/orders", invalidRequest);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -66,10 +66,10 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task UpdateStatus_WithInvalidStatusValue_ReturnsBadRequest()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/orders", ValidRequest());
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/orders", ValidRequest());
         var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
-        var response = await _client.PutAsJsonAsync($"/api/orders/{created!.Id}/status", new UpdateOrderStatusRequest("NotARealStatus"));
+        var response = await _client.PutAsJsonAsync($"/api/v1/orders/{created!.Id}/status", new UpdateOrderStatusRequest("NotARealStatus"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -77,10 +77,10 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task DeleteOrder_WhilePaymentProcessing_CancelsIt()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/orders", ValidRequest());
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/orders", ValidRequest());
         var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
-        var cancelResponse = await _client.DeleteAsync($"/api/orders/{created!.Id}");
+        var cancelResponse = await _client.DeleteAsync($"/api/v1/orders/{created!.Id}");
 
         Assert.Equal(HttpStatusCode.OK, cancelResponse.StatusCode);
         var cancelled = await cancelResponse.Content.ReadFromJsonAsync<OrderResponse>();
@@ -90,13 +90,13 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task DeleteOrder_AfterShipped_ReturnsConflict()
     {
-        var createResponse = await _client.PostAsJsonAsync("/api/orders", ValidRequest());
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/orders", ValidRequest());
         var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
-        var shipResponse = await _client.PutAsJsonAsync($"/api/orders/{created!.Id}/status", new UpdateOrderStatusRequest("Shipped"));
+        var shipResponse = await _client.PutAsJsonAsync($"/api/v1/orders/{created!.Id}/status", new UpdateOrderStatusRequest("Shipped"));
         Assert.Equal(HttpStatusCode.OK, shipResponse.StatusCode);
 
-        var cancelResponse = await _client.DeleteAsync($"/api/orders/{created.Id}");
+        var cancelResponse = await _client.DeleteAsync($"/api/v1/orders/{created.Id}");
 
         Assert.Equal(HttpStatusCode.Conflict, cancelResponse.StatusCode);
     }
@@ -104,7 +104,7 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task GetById_WhenOrderDoesNotExist_ReturnsNotFound()
     {
-        var response = await _client.GetAsync($"/api/orders/{Guid.NewGuid()}");
+        var response = await _client.GetAsync($"/api/v1/orders/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -113,10 +113,10 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
     public async Task List_ReturnsCreatedOrderFilteredByCustomer()
     {
         var request = ValidRequest();
-        var createResponse = await _client.PostAsJsonAsync("/api/orders", request);
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/orders", request);
         var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
-        var listResponse = await _client.GetAsync($"/api/orders?page=1&pageSize=10&customerId={request.CustomerId}");
+        var listResponse = await _client.GetAsync($"/api/v1/orders?page=1&pageSize=10&customerId={request.CustomerId}");
 
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
         var page = await listResponse.Content.ReadFromJsonAsync<PagedResult<OrderResponse>>();
@@ -128,11 +128,11 @@ public class OrdersControllerTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task List_FilteredByStatusPending_ExcludesCancelledOrders()
     {
-        var cancelledOrderResponse = await _client.PostAsJsonAsync("/api/orders", ValidRequest());
+        var cancelledOrderResponse = await _client.PostAsJsonAsync("/api/v1/orders", ValidRequest());
         var cancelledOrder = await cancelledOrderResponse.Content.ReadFromJsonAsync<OrderResponse>();
-        await _client.DeleteAsync($"/api/orders/{cancelledOrder!.Id}");
+        await _client.DeleteAsync($"/api/v1/orders/{cancelledOrder!.Id}");
 
-        var listResponse = await _client.GetAsync("/api/orders?status=Cancelled&pageSize=50");
+        var listResponse = await _client.GetAsync("/api/v1/orders?status=Cancelled&pageSize=50");
         var page = await listResponse.Content.ReadFromJsonAsync<PagedResult<OrderResponse>>();
 
         Assert.Contains(page!.Items, o => o.Id == cancelledOrder.Id);

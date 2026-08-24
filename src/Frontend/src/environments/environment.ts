@@ -1,12 +1,10 @@
-// Phase 4: the frontend calls Order/Payment/Inventory Service directly,
-// since the API Gateway (Phase 5) does not exist yet - see CLAUDE.md,
-// "Architecture: Non-Negotiable Rules" for the documented interim
-// exception. Once the Gateway exists, these three URLs collapse to one
-// gatewayUrl with no service/component changes elsewhere in the app.
+// Phase 5: the frontend now calls only the API Gateway, which proxies to
+// Order/Payment/Inventory Service and forwards the SignalR hub's WebSocket
+// traffic - see CLAUDE.md, "Architecture: Non-Negotiable Rules". This
+// collapses the three base URLs used during the temporary Phase 4 exception
+// into one, with no other frontend code changes.
 export const environment = {
   production: false,
-  orderServiceUrl: 'http://localhost:5290',
-  paymentServiceUrl: 'http://localhost:5033',
-  inventoryServiceUrl: 'http://localhost:5225',
-  orderHubUrl: 'http://localhost:5290/hubs/orders',
+  gatewayUrl: 'http://localhost:5013',
+  orderHubUrl: 'http://localhost:5013/hubs/orders',
 };

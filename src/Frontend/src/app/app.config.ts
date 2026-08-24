@@ -10,6 +10,7 @@ import { provideEffects } from '@ngrx/effects';
 import { provideStore } from '@ngrx/store';
 import { provideStoreDevtools } from '@ngrx/store-devtools';
 import { routes } from './app.routes';
+import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { ordersFeature } from './features/orders/store/orders.reducer';
 import { OrdersEffects } from './features/orders/store/orders.effects';
@@ -21,7 +22,7 @@ export const appConfig: ApplicationConfig = {
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
     provideAnimationsAsync(),
-    provideHttpClient(withInterceptors([errorInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
     provideStore({ [ordersFeature.name]: ordersFeature.reducer }),
     provideEffects(OrdersEffects),
     provideStoreDevtools({ maxAge: 25, logOnly: environment.production }),

@@ -9,7 +9,7 @@ Each microservice has its own Postman collection in this folder, named `<Service
 | Order Service | [OrderService.postman_collection.json](OrderService.postman_collection.json) | 1 |
 | Payment Service | [PaymentService.postman_collection.json](PaymentService.postman_collection.json) | 2 |
 | Inventory Service | [InventoryService.postman_collection.json](InventoryService.postman_collection.json) | 2 |
-| API Gateway | pending | 5 |
+| API Gateway | [ApiGateway.postman_collection.json](ApiGateway.postman_collection.json) | 5 |
 
 ## Convention
 

@@ -1,6 +1,13 @@
 -- Inventory Service schema (Phase 1, Task 1.1). Run against inventorydb.
 -- The service itself (API, EF Core) is built in Phase 2; this script
 -- gets the schema ready ahead of time, as the original exercise asks.
+--
+-- The \c here is a no-op when this file is already run with `psql -d
+-- inventorydb` (the documented manual step in README.md), and is what makes
+-- it also work unmodified when Docker mounts it into
+-- /docker-entrypoint-initdb.d/ (Phase 5) - that mechanism always connects
+-- to the container's default database first, regardless of file name.
+\c inventorydb
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 

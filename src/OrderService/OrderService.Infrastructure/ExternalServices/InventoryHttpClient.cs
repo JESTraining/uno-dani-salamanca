@@ -7,10 +7,11 @@ namespace OrderService.Infrastructure.ExternalServices;
 
 internal sealed record InventoryProductDto(Guid Id, string Sku, string Name, decimal UnitPrice, int StockQuantity, int ReservedQuantity);
 
-/// Talks to the Inventory Service's GET /api/products/{id} (see README.md,
-/// "Phase 2: Payment & Inventory Services"). That service does not exist yet,
-/// so every call fails until then - by design, order creation must not
-/// succeed without a confirmed stock check.
+/// Talks to Inventory Service's GET /api/v1/products/{id} directly - an
+/// internal service-to-service call, not frontend traffic, so it is not
+/// routed through the API Gateway (see CLAUDE.md, "Architecture:
+/// Non-Negotiable Rules": synchronous calls are allowed via the Gateway
+/// "or explicitly documented REST calls").
 public class InventoryHttpClient : IInventoryAvailabilityChecker
 {
     private readonly HttpClient _httpClient;
@@ -27,7 +28,7 @@ public class InventoryHttpClient : IInventoryAvailabilityChecker
             HttpResponseMessage response;
             try
             {
-                response = await _httpClient.GetAsync($"/api/products/{item.ProductId}", cancellationToken);
+                response = await _httpClient.GetAsync($"/api/v1/products/{item.ProductId}", cancellationToken);
             }
             catch (HttpRequestException ex)
             {

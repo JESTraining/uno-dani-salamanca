@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Application.Abstractions;
 using PaymentService.Application.Contracts;
@@ -5,7 +6,8 @@ using PaymentService.Application.Contracts;
 namespace PaymentService.API.Controllers;
 
 [ApiController]
-[Route("api/payments")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/payments")]
 public class PaymentsController : ControllerBase
 {
     private readonly IPaymentManager _paymentManager;

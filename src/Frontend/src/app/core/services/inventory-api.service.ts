@@ -7,7 +7,7 @@ import { PagedResult, ProductResponse } from '../models/product.models';
 @Injectable({ providedIn: 'root' })
 export class InventoryApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.inventoryServiceUrl}/api/products`;
+  private readonly baseUrl = `${environment.gatewayUrl}/api/v1/products`;
 
   listProducts(page = 1, pageSize = 50): Observable<PagedResult<ProductResponse>> {
     const params = new HttpParams().set('page', String(page)).set('pageSize', String(pageSize));

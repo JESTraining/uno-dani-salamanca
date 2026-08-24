@@ -7,7 +7,7 @@ import { PaymentResponse } from '../models/payment.models';
 @Injectable({ providedIn: 'root' })
 export class PaymentApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.paymentServiceUrl}/api/payments`;
+  private readonly baseUrl = `${environment.gatewayUrl}/api/v1/payments`;
 
   getPayment(orderId: string): Observable<PaymentResponse> {
     return this.http.get<PaymentResponse>(`${this.baseUrl}/${orderId}`);

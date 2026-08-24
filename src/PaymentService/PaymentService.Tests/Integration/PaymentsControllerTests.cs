@@ -18,7 +18,7 @@ public class PaymentsControllerTests : IClassFixture<CustomWebApplicationFactory
     {
         var request = new ProcessPaymentRequest(Guid.NewGuid(), 150m, "CreditCard");
 
-        var response = await _client.PostAsJsonAsync("/api/payments/process", request);
+        var response = await _client.PostAsJsonAsync("/api/v1/payments/process", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var payment = await response.Content.ReadFromJsonAsync<PaymentResponse>();
@@ -31,7 +31,7 @@ public class PaymentsControllerTests : IClassFixture<CustomWebApplicationFactory
     {
         var request = new ProcessPaymentRequest(Guid.NewGuid(), 10000.01m, "CreditCard");
 
-        var response = await _client.PostAsJsonAsync("/api/payments/process", request);
+        var response = await _client.PostAsJsonAsync("/api/v1/payments/process", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var payment = await response.Content.ReadFromJsonAsync<PaymentResponse>();
@@ -44,8 +44,8 @@ public class PaymentsControllerTests : IClassFixture<CustomWebApplicationFactory
     {
         var request = new ProcessPaymentRequest(Guid.NewGuid(), 150m, "CreditCard");
 
-        var first = await (await _client.PostAsJsonAsync("/api/payments/process", request)).Content.ReadFromJsonAsync<PaymentResponse>();
-        var second = await (await _client.PostAsJsonAsync("/api/payments/process", request)).Content.ReadFromJsonAsync<PaymentResponse>();
+        var first = await (await _client.PostAsJsonAsync("/api/v1/payments/process", request)).Content.ReadFromJsonAsync<PaymentResponse>();
+        var second = await (await _client.PostAsJsonAsync("/api/v1/payments/process", request)).Content.ReadFromJsonAsync<PaymentResponse>();
 
         Assert.Equal(first!.Id, second!.Id);
     }
@@ -53,7 +53,7 @@ public class PaymentsControllerTests : IClassFixture<CustomWebApplicationFactory
     [Fact]
     public async Task GetByOrderId_WhenNoPaymentProcessed_ReturnsNotFound()
     {
-        var response = await _client.GetAsync($"/api/payments/{Guid.NewGuid()}");
+        var response = await _client.GetAsync($"/api/v1/payments/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -62,9 +62,9 @@ public class PaymentsControllerTests : IClassFixture<CustomWebApplicationFactory
     public async Task GetByOrderId_AfterProcessing_ReturnsThePayment()
     {
         var orderId = Guid.NewGuid();
-        await _client.PostAsJsonAsync("/api/payments/process", new ProcessPaymentRequest(orderId, 150m, "CreditCard"));
+        await _client.PostAsJsonAsync("/api/v1/payments/process", new ProcessPaymentRequest(orderId, 150m, "CreditCard"));
 
-        var response = await _client.GetAsync($"/api/payments/{orderId}");
+        var response = await _client.GetAsync($"/api/v1/payments/{orderId}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var payment = await response.Content.ReadFromJsonAsync<PaymentResponse>();

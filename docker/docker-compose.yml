@@ -1,0 +1,134 @@
+name: uno-dani-salamanca
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: orders-postgres
+    environment:
+      POSTGRES_PASSWORD: devpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../scripts/setup-databases.sql:/docker-entrypoint-initdb.d/01-setup-databases.sql:ro
+      - ../scripts/payment-service-schema.sql:/docker-entrypoint-initdb.d/02-payment-service-schema.sql:ro
+      - ../scripts/inventory-service-schema.sql:/docker-entrypoint-initdb.d/03-inventory-service-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: orders-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  seq:
+    image: datalust/seq:latest
+    container_name: orders-seq
+    environment:
+      ACCEPT_EULA: "Y"
+    ports:
+      - "5341:5341"
+      - "8081:80"
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: orders-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: orders-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  order-service:
+    build:
+      context: ../src/OrderService
+      dockerfile: OrderService.API/Dockerfile
+    container_name: orders-order-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+    ports:
+      - "5290:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  payment-service:
+    build:
+      context: ../src/PaymentService
+      dockerfile: PaymentService.API/Dockerfile
+    container_name: orders-payment-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+    ports:
+      - "5033:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  inventory-service:
+    build:
+      context: ../src/InventoryService
+      dockerfile: InventoryService.API/Dockerfile
+    container_name: orders-inventory-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+    ports:
+      - "5225:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: ../src/ApiGateway
+      dockerfile: ApiGateway.API/Dockerfile
+    container_name: orders-api-gateway
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+    ports:
+      - "5013:8080"
+    depends_on:
+      order-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../src/Frontend
+    container_name: orders-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Order Service",
-    "description": "REST API collection for Order Service (Phase 1).\n\nRequirements before using it:\n- Docker containers `orders-postgres` and `orders-rabbitmq` running.\n- API running: `cd src/OrderService/OrderService.API && dotnet run --launch-profile http` (listens on http://localhost:5290).\n- Inventory Service also running (`docs/api/InventoryService.postman_collection.json`) with at least one product created - `POST /api/orders` validates stock against it before creating the order, and responds 503 Service Unavailable if it is unreachable. Payment Service (`docs/api/PaymentService.postman_collection.json`) should be running too, so a created order actually gets paid and its status changes automatically.\n\nCollection variables: `baseUrl` (the API's URL) and `orderId` (filled in automatically when running 'Create Order' with a successful response, so the rest of the requests can be chained without copying the id by hand).",
+    "description": "REST API collection for Order Service (Phase 1).\n\nRequirements before using it:\n- Docker containers `orders-postgres` and `orders-rabbitmq` running.\n- API running: `cd src/OrderService/OrderService.API && dotnet run --launch-profile http` (listens on http://localhost:5290).\n- Inventory Service also running (`docs/api/InventoryService.postman_collection.json`) with at least one product created - `POST /api/v1/orders` validates stock against it before creating the order, and responds 503 Service Unavailable if it is unreachable. Payment Service (`docs/api/PaymentService.postman_collection.json`) should be running too, so a created order actually gets paid and its status changes automatically.\n\nCollection variables: `baseUrl` (the API's URL) and `orderId` (filled in automatically when running 'Create Order' with a successful response, so the rest of the requests can be chained without copying the id by hand).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -22,11 +22,11 @@
           }
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/orders",
+          "raw": "{{baseUrl}}/api/v1/orders",
           "host": [ "{{baseUrl}}" ],
-          "path": [ "api", "orders" ]
+          "path": [ "api", "v1", "orders" ]
         },
-        "description": "Creates a new order. Validates stock availability against Inventory Service before creating the order, so Inventory Service must be running with the requested product in stock (see the collection description).\n\nBusiness rules applied:\n- At least one item is required in 'items'.\n- The total amount (sum of quantity * unitPrice across all items) must be greater than 0.\n- customerEmail must be a valid email format.\n\nSuccessful response: 201 Created, with the created order in 'Pending' status and the 'Location' header pointing to GET /api/orders/{id}.",
+        "description": "Creates a new order. Validates stock availability against Inventory Service before creating the order, so Inventory Service must be running with the requested product in stock (see the collection description).\n\nBusiness rules applied:\n- At least one item is required in 'items'.\n- The total amount (sum of quantity * unitPrice across all items) must be greater than 0.\n- customerEmail must be a valid email format.\n\nSuccessful response: 201 Created, with the created order in 'Pending' status and the 'Location' header pointing to GET /api/v1/orders/{id}.",
         "body": {
           "mode": "raw",
           "raw": "{\n  \"customerId\": \"{{$guid}}\",\n  \"customerName\": \"Jane Doe\",\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"items\": [\n    {\n      \"productId\": \"{{$guid}}\",\n      \"productName\": \"Widget\",\n      \"quantity\": 2,\n      \"unitPrice\": 9.99\n    }\n  ]\n}",
@@ -50,7 +50,7 @@
       "response": [
         {
           "name": "201 Created",
-          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/orders" } },
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/orders" } },
           "status": "Created",
           "code": 201,
           "header": [ { "key": "Content-Type", "value": "application/json" } ],
@@ -58,7 +58,7 @@
         },
         {
           "name": "503 Service Unavailable (Inventory Service unreachable)",
-          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/orders" } },
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/orders" } },
           "status": "Service Unavailable",
           "code": 503,
           "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
@@ -66,7 +66,7 @@
         },
         {
           "name": "400 Bad Request (no items)",
-          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/orders" } },
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/orders" } },
           "status": "Bad Request",
           "code": 400,
           "header": [ { "key": "Content-Type", "value": "application/json" } ],
@@ -80,16 +80,16 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/orders/{{orderId}}",
+          "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}",
           "host": [ "{{baseUrl}}" ],
-          "path": [ "api", "orders", "{{orderId}}" ]
+          "path": [ "api", "v1", "orders", "{{orderId}}" ]
         },
         "description": "Returns an order's detail, including its items.\n\nUses the {{orderId}} collection variable, which is filled in automatically when running 'Create Order' with a 201 response. It can also be replaced by hand with any existing id."
       },
       "response": [
         {
           "name": "200 OK",
-          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}" } },
           "status": "OK",
           "code": 200,
           "header": [ { "key": "Content-Type", "value": "application/json" } ],
@@ -97,7 +97,7 @@
         },
         {
           "name": "404 Not Found",
-          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}" } },
           "status": "Not Found",
           "code": 404,
           "header": [],
@@ -111,9 +111,9 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/orders?page=1&pageSize=20&status=&dateFrom=&dateTo=&customerId=",
+          "raw": "{{baseUrl}}/api/v1/orders?page=1&pageSize=20&status=&dateFrom=&dateTo=&customerId=",
           "host": [ "{{baseUrl}}" ],
-          "path": [ "api", "orders" ],
+          "path": [ "api", "v1", "orders" ],
           "query": [
             { "key": "page", "value": "1", "description": "Page number, 1-based." },
             { "key": "pageSize", "value": "20", "description": "Page size (internally clamped between 1 and 100)." },
@@ -128,7 +128,7 @@
       "response": [
         {
           "name": "200 OK",
-          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/orders?page=1&pageSize=20" } },
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/v1/orders?page=1&pageSize=20" } },
           "status": "OK",
           "code": 200,
           "header": [ { "key": "Content-Type", "value": "application/json" } ],
@@ -142,9 +142,9 @@
         "method": "PUT",
         "header": [ { "key": "Content-Type", "value": "application/json" } ],
         "url": {
-          "raw": "{{baseUrl}}/api/orders/{{orderId}}/status",
+          "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/status",
           "host": [ "{{baseUrl}}" ],
-          "path": [ "api", "orders", "{{orderId}}", "status" ]
+          "path": [ "api", "v1", "orders", "{{orderId}}", "status" ]
         },
         "description": "Updates an order's status.\n\nValid values for 'status': Pending, PaymentProcessing, PaymentFailed, InventoryProcessing, InventoryFailed, Completed, Cancelled, Shipped, Delivered.\n\nBusiness rule: an order in Shipped or Delivered status is immutable; any attempt to change its status responds 409 Conflict.",
         "body": {
@@ -156,7 +156,7 @@
       "response": [
         {
           "name": "200 OK",
-          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/status" } },
+          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/status" } },
           "status": "OK",
           "code": 200,
           "header": [ { "key": "Content-Type", "value": "application/json" } ],
@@ -164,7 +164,7 @@
         },
         {
           "name": "400 Bad Request (invalid status value)",
-          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/status" } },
+          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/status" } },
           "status": "Bad Request",
           "code": 400,
           "header": [],
@@ -172,7 +172,7 @@
         },
         {
           "name": "409 Conflict (order is immutable)",
-          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}/status" } },
+          "originalRequest": { "method": "PUT", "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/status" } },
           "status": "Conflict",
           "code": 409,
           "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
@@ -186,16 +186,16 @@
         "method": "DELETE",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/orders/{{orderId}}",
+          "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}",
           "host": [ "{{baseUrl}}" ],
-          "path": [ "api", "orders", "{{orderId}}" ]
+          "path": [ "api", "v1", "orders", "{{orderId}}" ]
         },
         "description": "Cancels an order.\n\nBusiness rule: an order can only be cancelled while in Pending or PaymentProcessing status. Any other status responds 409 Conflict."
       },
       "response": [
         {
           "name": "200 OK",
-          "originalRequest": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "originalRequest": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}" } },
           "status": "OK",
           "code": 200,
           "header": [ { "key": "Content-Type", "value": "application/json" } ],
@@ -203,7 +203,7 @@
         },
         {
           "name": "409 Conflict (not cancellable in the current status)",
-          "originalRequest": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "originalRequest": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}" } },
           "status": "Conflict",
           "code": 409,
           "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
@@ -211,7 +211,7 @@
         },
         {
           "name": "404 Not Found",
-          "originalRequest": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/orders/{{orderId}}" } },
+          "originalRequest": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}" } },
           "status": "Not Found",
           "code": 404,
           "header": [],

@@ -12,7 +12,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class OrderApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.orderServiceUrl}/api/orders`;
+  private readonly baseUrl = `${environment.gatewayUrl}/api/v1/orders`;
 
   createOrder(request: CreateOrderRequest, idempotencyKey?: string): Observable<OrderResponse> {
     const headers = idempotencyKey ? new HttpHeaders({ 'Idempotency-Key': idempotencyKey }) : undefined;

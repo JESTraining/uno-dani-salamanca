@@ -1,11 +1,14 @@
+using Asp.Versioning;
 using InventoryService.Application.Abstractions;
 using InventoryService.Application.Contracts;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventoryService.API.Controllers;
 
 [ApiController]
-[Route("api/products")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/products")]
 public class ProductsController : ControllerBase
 {
     private readonly IProductManager _productManager;
@@ -29,8 +32,9 @@ public class ProductsController : ControllerBase
         return result is null ? NotFound() : Ok(result);
     }
 
-    // Not JWT-protected yet: role-based authorization ("admin only" in the
-    // original exercise) starts in Phase 5, per CLAUDE.md.
+    // Role-based authorization ("admin only" in the original exercise),
+    // implemented Phase 5 - see CLAUDE.md, Security section.
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<ActionResult<ProductResponse>> Create([FromBody] CreateProductRequest request, CancellationToken cancellationToken)
     {

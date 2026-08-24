@@ -40,17 +40,20 @@ Customers place orders through the API. Each order goes through a saga that coor
                         └─────────────┘
 ```
 
-Each service owns its own database exclusively; there is no shared schema or cross-service database access. Services never call each other's databases directly. The diagram above shows the target state once the API Gateway exists (Phase 5); until then, the frontend calls Order/Payment/Inventory Service directly (see CLAUDE.md for the documented interim exception).
+Each service owns its own database exclusively; there is no shared schema or cross-service database access. Services never call each other's databases directly. The frontend now calls only the API Gateway, which routes to Order/Payment/Inventory Service and forwards the SignalR hub's WebSocket traffic.
 
 ## Technology Stack
 
 | Layer | Technology |
 |---|---|
 | Backend | C# / .NET 10 |
+| API Gateway | YARP reverse proxy, JWT bearer auth, rate limiting |
 | Data access | Entity Framework Core, PostgreSQL |
 | Messaging | RabbitMQ via MassTransit (8.x) |
 | Frontend | Angular (standalone components), NgRx, Angular Material |
 | Real-time updates | SignalR |
+| Logging | Serilog (Console, File, Seq) |
+| Observability | OpenTelemetry tracing (Jaeger), Prometheus metrics |
 | Containers | Docker, Docker Compose |
 | Testing | xUnit, Testcontainers, WebApplicationFactory, Vitest |
 
@@ -62,29 +65,55 @@ Each service owns its own database exclusively; there is no shared schema or cro
 | 2 | Payment Service + Inventory Service | Complete |
 | 3 | RabbitMQ event contracts + Saga pattern | Complete |
 | 4 | Frontend (Angular) | Complete |
-| 5 | Docker Compose + production readiness | Pending |
+| 5 | API Gateway, Docker Compose + production readiness | Complete |
 | 6 | Full test suite + documentation | Pending |
 
-All three core services (Order, Payment, Inventory) are implemented end-to-end and verified together against real RabbitMQ and PostgreSQL. Creating an order automatically triggers payment processing and, on success, inventory reservation - and the saga closes the loop back to Order Service, which reacts to the payment/inventory outcome and drives the order all the way to `Completed` (or a `PaymentFailed`/`InventoryFailed` terminal state), with no manual steps anywhere in the flow. Every consumer across all three services retries 3 times with exponential backoff before a failed message is dead-lettered. The Angular frontend (`src/Frontend/`) provides order creation, a live-updating order list, and an order detail view with a status timeline, driven in real time by a SignalR hub in Order Service - no polling, no page refresh. 160 backend tests and 52 frontend tests, all passing. The API Gateway and the Docker setup do not exist yet.
+All three core services (Order, Payment, Inventory) are implemented end-to-end and verified together against real RabbitMQ and PostgreSQL. Creating an order automatically triggers payment processing and, on success, inventory reservation - and the saga closes the loop back to Order Service, which reacts to the payment/inventory outcome and drives the order all the way to `Completed` (or a `PaymentFailed`/`InventoryFailed` terminal state), with no manual steps anywhere in the flow. Every consumer across all three services retries 3 times with exponential backoff before a failed message is dead-lettered. The Angular frontend (`src/Frontend/`) provides order creation, a live-updating order list, and an order detail view with a status timeline, driven in real time by a SignalR hub in Order Service - no polling, no page refresh.
+
+Phase 5 added the API Gateway (`src/ApiGateway/`, YARP), the single URL the frontend now talks to; a minimal demo JWT login gating only Inventory Service's product-creation endpoint; API versioning (`/api/v1/...` everywhere); Serilog structured logging; `/health`/`/ready`/`/live` health checks; OpenTelemetry tracing to Jaeger and Prometheus metrics; and full containerization via Docker Compose. 173 backend tests (99 Order, 25 Payment, 38 Inventory, 11 Gateway) and 54 frontend tests, all passing.
 
 ## Getting Started
 
 ### Prerequisites
 
-- .NET 10 SDK
-- Docker Desktop
-- Node.js 22+ and Angular CLI (`npm install -g @angular/cli`), for the frontend
+- Docker Desktop (both options below use it; Option B also runs the .NET/Angular processes on the host)
+- .NET 10 SDK — Option B only
+- Node.js 22+ and Angular CLI (`npm install -g @angular/cli`) — Option B only
 
-### 1. Start the infrastructure
+### Option A: Docker Compose (recommended)
+
+Brings up the entire system — Postgres, RabbitMQ, Seq, Jaeger, Prometheus, all four backend services, and the frontend — with a single command, in a clean environment:
+
+```bash
+cd docker
+docker compose up --build
+```
+
+| Endpoint | URL |
+|---|---|
+| Frontend | `http://localhost:4200` |
+| API Gateway (Swagger) | `http://localhost:5013/swagger` |
+| RabbitMQ management UI | `http://localhost:15672` (`guest` / `guest`) |
+| Seq (structured logs) | `http://localhost:8081` |
+| Jaeger (distributed traces) | `http://localhost:16686` |
+| Prometheus (metrics) | `http://localhost:9090` |
+
+`docker-compose.override.yml` is merged automatically and runs every service via `dotnet watch run` / `ng serve` with the local source bind-mounted, so edits hot-reload the same way they would running locally. Run `docker compose -f docker-compose.yml up --build` explicitly to skip the override and run the production images instead.
+
+Demo JWT credentials (see [`CLAUDE.md`](CLAUDE.md)'s Security section for the reasoning): `admin` / `Admin123!` (role `Admin`, the only role that can create products) and `customer` / `Customer123!` (role `Customer`). Obtain a token with `POST /api/v1/auth/login` against the Gateway.
+
+### Option B: Manual (run each process yourself)
+
+Useful for debugging a single service without the rest of the stack.
+
+**1. Start the infrastructure**
 
 ```bash
 docker run --name orders-postgres -e POSTGRES_PASSWORD=devpassword -p 5432:5432 -d postgres:16
 docker run --name orders-rabbitmq -p 5672:5672 -p 15672:15672 -d rabbitmq:3-management
 ```
 
-RabbitMQ management UI: `http://localhost:15672` (`guest` / `guest`).
-
-### 2. Provision the databases
+**2. Provision the databases**
 
 Run against the `orders-postgres` container, in order:
 
@@ -94,38 +123,45 @@ docker exec -i orders-postgres psql -U postgres -d paymentdb < scripts/payment-s
 docker exec -i orders-postgres psql -U postgres -d inventorydb < scripts/inventory-service-schema.sql
 ```
 
-This creates three logical databases (`orderdb`, `paymentdb`, `inventorydb`), each with its own dedicated role. Order Service's own schema is applied via its EF Core migration instead (next step).
+This creates three logical databases (`orderdb`, `paymentdb`, `inventorydb`), each with its own dedicated role. Order Service's own schema is applied automatically on startup instead (`Database.Migrate()`, next step) — no manual `dotnet ef database update` needed.
 
-### 3. Run Order Service
+**3. Run Order Service**
 
 ```bash
-cd src/OrderService
-dotnet ef database update --project OrderService.Infrastructure --startup-project OrderService.API
-cd OrderService.API
+cd src/OrderService/OrderService.API
 dotnet run --launch-profile http
 ```
 
-Listens on `http://localhost:5290`, Swagger at `http://localhost:5290/swagger`. Order Service is the only one with an EF Core migration to apply — Payment and Inventory Service map onto the schema already created in step 2.
+Listens on `http://localhost:5290`, Swagger at `http://localhost:5290/swagger/index.html` (Swagger UI is served from a versioned path now — see the `.http` file or Swagger's own version dropdown).
 
-### 4. Run Payment Service
+**4. Run Payment Service**
 
 ```bash
 cd src/PaymentService/PaymentService.API
 dotnet run --launch-profile http
 ```
 
-Listens on `http://localhost:5033`, Swagger at `http://localhost:5033/swagger`.
+Listens on `http://localhost:5033`.
 
-### 5. Run Inventory Service
+**5. Run Inventory Service**
 
 ```bash
 cd src/InventoryService/InventoryService.API
 dotnet run --launch-profile http
 ```
 
-Listens on `http://localhost:5225`, Swagger at `http://localhost:5225/swagger`.
+Listens on `http://localhost:5225`.
 
-### 6. Run the Frontend
+**6. Run the API Gateway**
+
+```bash
+cd src/ApiGateway/ApiGateway.API
+dotnet run --launch-profile http
+```
+
+Listens on `http://localhost:5013`, Swagger at `http://localhost:5013/swagger`. Requires Order/Payment/Inventory Service already running (steps 3-5) - it proxies every request to them and issues/validates the demo JWTs.
+
+**7. Run the Frontend**
 
 ```bash
 cd src/Frontend
@@ -133,18 +169,19 @@ npm install
 npm start
 ```
 
-Listens on `http://localhost:4200`. Expects Order/Payment/Inventory Service already running (steps 3-5) - it calls them directly for now (see the Architecture section above) and connects to Order Service's SignalR hub at `/hubs/orders`.
+Listens on `http://localhost:4200`. Talks only to the Gateway (`http://localhost:5013`, step 6) and connects to Order Service's SignalR hub through it at `/hubs/orders`.
 
-### 7. Try the full system
+### Try the full system
 
-Use the Angular app at `http://localhost:4200`: create a product first via Inventory Service's Swagger (`http://localhost:5225/swagger`, no product-management UI exists in the frontend yet - that is admin-dashboard bonus scope), then create an order from the frontend's "New Order" form. Watch the order list and detail view update live, with no page refresh, as the order moves through `PaymentProcessing` → `InventoryProcessing` → `Completed` (or a failure branch).
+Use the Angular app at `http://localhost:4200`: create a product first via the Gateway's Swagger (`http://localhost:5013/swagger`, `POST /api/v1/products` requires an Admin bearer token — no product-management UI exists in the frontend yet, that is admin-dashboard bonus scope), then create an order from the frontend's "New Order" form. Watch the order list and detail view update live, with no page refresh, as the order moves through `PaymentProcessing` → `InventoryProcessing` → `Completed` (or a failure branch).
 
-Alternatively, drive it purely over HTTP: import the three collections in `docs/api/` into Postman (one per service — see [`docs/api/README.md`](docs/api/README.md)), or use each service's own `*.http` file from VS Code or Visual Studio.
+Alternatively, drive it purely over HTTP: import the collections in `docs/api/` into Postman (one per service, plus the Gateway — see [`docs/api/README.md`](docs/api/README.md)), or use each service's own `*.http` file from VS Code or Visual Studio.
 
-With all three services running:
-1. Create a product with Inventory Service's `Create Product` request.
-2. Create an order with Order Service's `Create Order` request, using that product's id.
-3. Poll `GET /api/orders/{id}` on Order Service over the next few seconds: the order moves from `PaymentProcessing` to `InventoryProcessing` to `Completed` (or lands in `PaymentFailed`/`InventoryFailed`, per the mock gateway rules and available stock) — entirely automatic, driven by RabbitMQ events, with no further requests needed. `GET /api/payments/{orderId}` on Payment Service and the product's `reservedQuantity` on Inventory Service reflect the same outcome along the way.
+Through the Gateway (`http://localhost:5013`):
+1. `POST /api/v1/auth/login` with the demo admin credentials to obtain a bearer token.
+2. Create a product with `POST /api/v1/products`, using that token.
+3. Create an order with `POST /api/v1/orders`, using that product's id.
+4. Poll `GET /api/v1/orders/{id}` over the next few seconds: the order moves from `PaymentProcessing` to `InventoryProcessing` to `Completed` (or lands in `PaymentFailed`/`InventoryFailed`, per the mock gateway rules and available stock) — entirely automatic, driven by RabbitMQ events, with no further requests needed. `GET /api/v1/payments/{orderId}` and the product's `reservedQuantity` reflect the same outcome along the way.
 
 ## Running Tests
 
@@ -152,14 +189,15 @@ With all three services running:
 cd src/OrderService && dotnet test
 cd src/PaymentService && dotnet test
 cd src/InventoryService && dotnet test
+cd src/ApiGateway && dotnet test
 cd src/Frontend && npm test
 ```
 
-160 backend tests across the three services (99 Order, 25 Payment, 36 Inventory): domain rules, application use cases, consumer wiring (MassTransit's in-memory test harness), end-to-end in-memory saga flow tests covering every branch (success and both failure paths) plus duplicate-event idempotency, a retry/dead-letter exhaustion test, and HTTP integration tests running against a real, disposable PostgreSQL instance (Testcontainers) — including a concurrency test that races two orders for the last unit of stock.
+173 backend tests across the four services (99 Order, 25 Payment, 38 Inventory, 11 Gateway): domain rules, application use cases, consumer wiring (MassTransit's in-memory test harness), end-to-end in-memory saga flow tests covering every branch (success and both failure paths) plus duplicate-event idempotency, a retry/dead-letter exhaustion test, HTTP integration tests running against a real, disposable PostgreSQL instance (Testcontainers) — including a concurrency test that races two orders for the last unit of stock — and JWT issuance/validation/role-claim tests for the Gateway.
 
-52 frontend tests (Vitest): NgRx reducer/effects/selectors, the SignalR-to-store bridge, the HTTP error interceptor, and component specs for each page and the shared status-badge/loading-skeleton components.
+54 frontend tests (Vitest): NgRx reducer/effects/selectors, the SignalR-to-store bridge, the HTTP error and auth interceptors, and component specs for each page and the shared status-badge/loading-skeleton components.
 
-Run the three backend commands one at a time, not in parallel: the integration tests connect to the real `orders-rabbitmq` broker (only Postgres is containerized per-test via Testcontainers), so two services' suites running at once can cross-deliver real messages mid-test.
+Run the four backend commands one at a time, not in parallel: the integration tests connect to the real `orders-rabbitmq` broker (only Postgres is containerized per-test via Testcontainers), so two services' suites running at once can cross-deliver real messages mid-test.
 
 ## Project Structure
 
@@ -169,8 +207,9 @@ Run the three backend commands one at a time, not in parallel: the integration t
 │   ├── OrderService/       Implemented (Phase 1)
 │   ├── PaymentService/     Implemented (Phase 2)
 │   ├── InventoryService/   Implemented (Phase 2)
-│   ├── ApiGateway/         Pending (Phase 5)
+│   ├── ApiGateway/         Implemented (Phase 5, YARP + JWT)
 │   └── Frontend/           Implemented (Phase 4, Angular)
+├── docker/                 Implemented (Phase 5): docker-compose.yml, docker-compose.override.yml, prometheus.yml
 ├── docs/
 │   ├── api/                Postman collection per service
 │   └── technical-exercise.md
