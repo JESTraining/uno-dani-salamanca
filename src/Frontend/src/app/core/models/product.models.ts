@@ -1,7 +1,7 @@
 // Mirrors InventoryService.Application/Contracts/ProductDtos.cs field-for-field.
-// Phase 4 only ever reads products (picker + stock check) - create/update-stock
-// are modeled for completeness but unused; product management is Admin
-// Dashboard bonus scope, explicitly out of this phase.
+// The frontend only ever reads products (picker + stock check) - create/
+// update-stock are modeled for completeness but unused; product management
+// is Admin Dashboard bonus scope, out of scope by deliberate decision.
 
 export interface CreateProductRequest {
   sku: string;

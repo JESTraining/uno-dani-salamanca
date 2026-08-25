@@ -2,11 +2,11 @@ import { Injectable } from '@angular/core';
 
 const STORAGE_KEY = 'auth_token';
 
-/// Minimal token storage - no login screen exists yet in the frontend (the
-/// only endpoint the backend actually gates is product creation, and there
-/// is no product-management UI either, both explicit bonus-dashboard scope
-/// deferred since Phase 4). This exists as a hook for a future admin login,
-/// not as a claim that authentication is fully wired end-to-end today.
+/// Minimal token storage. The frontend has no login screen by deliberate
+/// scope decision - the only endpoint the backend actually gates is product
+/// creation, and there is no product-management UI either (both are the
+/// admin-dashboard bonus, out of scope). This is a hook for a possible
+/// future admin UI, not a claim that authentication is wired end-to-end.
 @Injectable({ providedIn: 'root' })
 export class TokenStorageService {
   getToken(): string | null {

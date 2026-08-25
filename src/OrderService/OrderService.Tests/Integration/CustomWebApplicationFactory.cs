@@ -9,9 +9,9 @@ using Testcontainers.PostgreSql;
 
 namespace OrderService.Tests.Integration;
 
-/// Stub used only in tests: the real Inventory Service does not exist until
-/// Phase 2, so integration tests assume stock is always available and focus
-/// on Order Service's own behavior.
+/// Stub used only in tests, standing in for the real Inventory Service so
+/// integration tests assume stock is always available and focus on Order
+/// Service's own behavior, independent of Inventory Service's availability.
 public class AlwaysAvailableInventoryChecker : IInventoryAvailabilityChecker
 {
     public Task<bool> IsStockAvailableAsync(IReadOnlyCollection<StockCheckItem> items, CancellationToken cancellationToken) =>
