@@ -85,17 +85,6 @@ builder.Services.AddScoped<IOrderEventPublisher>(sp => new CompositeOrderEventPu
     sp.GetRequiredService<RabbitMqOrderEventPublisher>(),
     sp.GetRequiredService<SignalROrderEventPublisher>()));
 
-builder.Services.AddCors(options =>
-{
-    // Phase 4: the frontend calls this service directly (no API Gateway
-    // yet, that is Phase 5) - see CLAUDE.md, "Architecture: Non-Negotiable
-    // Rules" for the documented interim exception.
-    options.AddPolicy("AllowFrontend", policy => policy
-        .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
-        .AllowAnyHeader()
-        .AllowAnyMethod());
-});
-
 builder.Services.AddHttpClient<IInventoryAvailabilityChecker, InventoryHttpClient>(client =>
 {
     var inventoryBaseUrl = builder.Configuration["Services:InventoryService:BaseUrl"]
@@ -171,7 +160,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-app.UseCors("AllowFrontend");
 app.UseHttpMetrics();
 app.MapControllers();
 app.MapHub<OrderHub>("/hubs/orders");

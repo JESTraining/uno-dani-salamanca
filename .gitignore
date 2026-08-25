@@ -3,6 +3,7 @@ bin/
 obj/
 out/
 TestResults/
+coverage-reports/
 
 # Visual Studio / Rider / VS Code
 .vs/

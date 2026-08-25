@@ -77,17 +77,6 @@ builder.Services.AddScoped<IPaymentGatewayClient, MockPaymentGateway>();
 builder.Services.AddSingleton<IRandomProvider, SystemRandomProvider>();
 builder.Services.AddSingleton<IPaymentProcessingDelay, RandomPaymentProcessingDelay>();
 
-builder.Services.AddCors(options =>
-{
-    // Phase 4: the frontend calls this service directly (no API Gateway
-    // yet, that is Phase 5) - see CLAUDE.md, "Architecture: Non-Negotiable
-    // Rules" for the documented interim exception.
-    options.AddPolicy("AllowFrontend", policy => policy
-        .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
-        .AllowAnyHeader()
-        .AllowAnyMethod());
-});
-
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<OrderCreatedConsumer>();
@@ -133,7 +122,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-app.UseCors("AllowFrontend");
 app.UseHttpMetrics();
 app.MapControllers();
 app.MapMetrics();

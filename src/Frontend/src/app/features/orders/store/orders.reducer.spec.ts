@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { OrdersActions } from './orders.actions';
 import { ordersReducer } from './orders.reducer';
 import { initialOrdersState } from './orders.state';
-import { OrderResponse } from '../../../core/models/order.models';
+import { CreateOrderRequest, OrderResponse } from '../../../core/models/order.models';
 
 function order(overrides: Partial<OrderResponse>): OrderResponse {
   return {
@@ -45,6 +45,60 @@ describe('ordersReducer', () => {
     const state = ordersReducer(withPage, OrdersActions.setFilters({ filters: { status: 'Completed' } }));
     expect(state.page).toBe(1);
     expect(state.filters.status).toBe('Completed');
+  });
+
+  it('sets the page number on setPage', () => {
+    const state = ordersReducer(initialOrdersState, OrdersActions.setPage({ page: 3 }));
+    expect(state.page).toBe(3);
+  });
+
+  it('sets loadingDetail on loadOrderDetail and populates selectedOrder on success', () => {
+    const loading = ordersReducer(initialOrdersState, OrdersActions.loadOrderDetail({ id: 'order-1' }));
+    expect(loading.loadingDetail).toBe(true);
+
+    const detail = order({ id: 'order-1' });
+    const success = ordersReducer(loading, OrdersActions.loadOrderDetailSuccess({ order: detail }));
+    expect(success.loadingDetail).toBe(false);
+    expect(success.selectedOrder).toEqual(detail);
+  });
+
+  it('records the error and clears loadingDetail on loadOrderDetailFailure', () => {
+    const state = ordersReducer(initialOrdersState, OrdersActions.loadOrderDetailFailure({ error: 'not found' }));
+    expect(state.loadingDetail).toBe(false);
+    expect(state.error).toBe('not found');
+  });
+
+  it('sets creating on createOrder and populates selectedOrder on success', () => {
+    const request: CreateOrderRequest = {
+      customerId: 'bbbbbbbb-0000-0000-0000-000000000000',
+      customerName: 'Alice',
+      customerEmail: 'alice@example.com',
+      items: [{ productId: 'cccccccc-0000-0000-0000-000000000000', productName: 'Widget', quantity: 1, unitPrice: 9.99 }],
+    };
+    const creating = ordersReducer(initialOrdersState, OrdersActions.createOrder({ request }));
+    expect(creating.creating).toBe(true);
+
+    const created = order({ id: 'order-new' });
+    const success = ordersReducer(creating, OrdersActions.createOrderSuccess({ order: created }));
+    expect(success.creating).toBe(false);
+    expect(success.selectedOrder).toEqual(created);
+  });
+
+  it('records the error and clears creating on createOrderFailure', () => {
+    const state = ordersReducer(initialOrdersState, OrdersActions.createOrderFailure({ error: 'validation failed' }));
+    expect(state.creating).toBe(false);
+    expect(state.error).toBe('validation failed');
+  });
+
+  it('records the error on cancelOrderFailure', () => {
+    const state = ordersReducer(initialOrdersState, OrdersActions.cancelOrderFailure({ error: 'cannot cancel' }));
+    expect(state.error).toBe('cannot cancel');
+  });
+
+  it('clears selectedOrder on clearSelectedOrder', () => {
+    const seeded = { ...initialOrdersState, selectedOrder: order({ id: 'order-1' }) };
+    const state = ordersReducer(seeded, OrdersActions.clearSelectedOrder());
+    expect(state.selectedOrder).toBeNull();
   });
 
   describe('realtime status patching', () => {

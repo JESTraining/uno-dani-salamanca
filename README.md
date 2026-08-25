@@ -66,11 +66,11 @@ Each service owns its own database exclusively; there is no shared schema or cro
 | 3 | RabbitMQ event contracts + Saga pattern | Complete |
 | 4 | Frontend (Angular) | Complete |
 | 5 | API Gateway, Docker Compose + production readiness | Complete |
-| 6 | Full test suite + documentation | Pending |
+| 6 | Full test suite + documentation | Complete |
 
 All three core services (Order, Payment, Inventory) are implemented end-to-end and verified together against real RabbitMQ and PostgreSQL. Creating an order automatically triggers payment processing and, on success, inventory reservation - and the saga closes the loop back to Order Service, which reacts to the payment/inventory outcome and drives the order all the way to `Completed` (or a `PaymentFailed`/`InventoryFailed` terminal state), with no manual steps anywhere in the flow. Every consumer across all three services retries 3 times with exponential backoff before a failed message is dead-lettered. The Angular frontend (`src/Frontend/`) provides order creation, a live-updating order list, and an order detail view with a status timeline, driven in real time by a SignalR hub in Order Service - no polling, no page refresh.
 
-Phase 5 added the API Gateway (`src/ApiGateway/`, YARP), the single URL the frontend now talks to; a minimal demo JWT login gating only Inventory Service's product-creation endpoint; API versioning (`/api/v1/...` everywhere); Serilog structured logging; `/health`/`/ready`/`/live` health checks; OpenTelemetry tracing to Jaeger and Prometheus metrics; and full containerization via Docker Compose. 173 backend tests (99 Order, 25 Payment, 38 Inventory, 11 Gateway) and 54 frontend tests, all passing.
+Phase 5 added the API Gateway (`src/ApiGateway/`, YARP), the single URL the frontend now talks to; a minimal demo JWT login gating only Inventory Service's product-creation endpoint; API versioning (`/api/v1/...` everywhere); Serilog structured logging; `/health`/`/ready`/`/live` health checks; OpenTelemetry tracing to Jaeger and Prometheus metrics; and full containerization via Docker Compose. Phase 6 closed out the exercise with measured test coverage (all four backend services and the frontend well above the 70% minimum on service logic/domain/event handlers - see "Running Tests" below) and the final documentation set: [`docs/architecture.md`](docs/architecture.md) and [`docs/adr/`](docs/adr/README.md). 176 backend tests (99 Order, 25 Payment, 38 Inventory, 14 Gateway) and 68 frontend tests, all passing.
 
 ## Getting Started
 
@@ -183,6 +183,25 @@ Through the Gateway (`http://localhost:5013`):
 3. Create an order with `POST /api/v1/orders`, using that product's id.
 4. Poll `GET /api/v1/orders/{id}` over the next few seconds: the order moves from `PaymentProcessing` to `InventoryProcessing` to `Completed` (or lands in `PaymentFailed`/`InventoryFailed`, per the mock gateway rules and available stock) — entirely automatic, driven by RabbitMQ events, with no further requests needed. `GET /api/v1/payments/{orderId}` and the product's `reservedQuantity` reflect the same outcome along the way.
 
+## Configuration Reference
+
+Every setting below is read from each service's `appsettings.json` via ASP.NET Core's configuration binding, which means any of them can be overridden with an environment variable using the `Section__Key` naming convention (double underscore for nesting) without touching a file - this is how `docker/docker-compose.yml` sets `ASPNETCORE_ENVIRONMENT=Docker` to select each service's `appsettings.Docker.json` overrides, and how a real deployment would inject secrets instead of using the dev-only literals checked into the repo.
+
+| Variable | Services | Purpose | Local dev default |
+|---|---|---|---|
+| `ConnectionStrings__OrderDb` / `PaymentDb` / `InventoryDb` | Order / Payment / Inventory | PostgreSQL connection string for that service's own database | `Host=localhost;Port=5432;Database=<db>;Username=<role>;Password=<role>_dev_pwd` |
+| `RabbitMq__Host`, `RabbitMq__Username`, `RabbitMq__Password` | Order, Payment, Inventory | RabbitMQ broker connection | `localhost` / `guest` / `guest` |
+| `Services__InventoryService__BaseUrl` | Order | Base URL for the one documented direct service-to-service call (stock check before creating an order) | `http://localhost:5225` |
+| `Cors__AllowedOrigins__0` | All four | Allowed browser origin(s) for CORS (array; only the Gateway's is exercised by a real caller today - see `CLAUDE.md`) | `http://localhost:4200` |
+| `Jwt__SigningKey`, `Jwt__Issuer`, `Jwt__Audience` | Gateway (issues), Inventory (validates) | Shared HMAC signing key/issuer/audience for JWT bearer tokens - **must** be overridden with a real secret outside local dev | dev-only literal in `appsettings.json` |
+| `Jwt__ExpirationMinutes` | Gateway | Issued token lifetime | `60` |
+| `Otlp__Endpoint` | All four | OTLP endpoint OpenTelemetry traces are exported to (Jaeger) | `http://localhost:4317` |
+| `Serilog__WriteTo__2__Args__serverUrl` | All four | Seq server URL (the third `WriteTo` sink, after Console/File) | `http://localhost:5341` |
+| `ASPNETCORE_ENVIRONMENT` | All four | Selects the `appsettings.{Environment}.json` overlay - `Docker` in Compose, unset (`Development`) for local `dotnet run` | `Development` |
+| `ASPNETCORE_URLS` | All four | Kestrel listen URL(s) - Compose sets this to `http://+:8080` inside each container | launch profile-specific (`http://localhost:5290` etc.) |
+| `ReverseProxy__Clusters__*__Destinations__destination1__Address` | Gateway | YARP's proxy target for each downstream service - Compose overrides these to the container service names (`http://order-service:8080/` etc.) | `http://localhost:5290/` etc. |
+| `POSTGRES_PASSWORD` | `postgres` container only | Superuser password for the shared Postgres container the three service databases live in | `devpassword` |
+
 ## Running Tests
 
 ```bash
@@ -193,11 +212,25 @@ cd src/ApiGateway && dotnet test
 cd src/Frontend && npm test
 ```
 
-173 backend tests across the four services (99 Order, 25 Payment, 38 Inventory, 11 Gateway): domain rules, application use cases, consumer wiring (MassTransit's in-memory test harness), end-to-end in-memory saga flow tests covering every branch (success and both failure paths) plus duplicate-event idempotency, a retry/dead-letter exhaustion test, HTTP integration tests running against a real, disposable PostgreSQL instance (Testcontainers) — including a concurrency test that races two orders for the last unit of stock — and JWT issuance/validation/role-claim tests for the Gateway.
+176 backend tests across the four services (99 Order, 25 Payment, 38 Inventory, 14 Gateway): domain rules, application use cases, consumer wiring (MassTransit's in-memory test harness), end-to-end in-memory saga flow tests covering every branch (success and both failure paths) plus duplicate-event idempotency, a retry/dead-letter exhaustion test, HTTP integration tests running against a real, disposable PostgreSQL instance (Testcontainers) — including a concurrency test that races two orders for the last unit of stock — and JWT issuance/validation/role-claim tests for the Gateway (including an integration test that boots the Gateway's real ASP.NET Core pipeline end-to-end, not just mocked services).
 
-54 frontend tests (Vitest): NgRx reducer/effects/selectors, the SignalR-to-store bridge, the HTTP error and auth interceptors, and component specs for each page and the shared status-badge/loading-skeleton components.
+68 frontend tests (Vitest): NgRx reducer/effects/selectors (including every action handler, not only the ones exercised by component specs), the SignalR-to-store bridge, the HTTP error and auth interceptors, and component specs for each page and the shared status-badge/loading-skeleton/confirm-dialog components.
 
 Run the four backend commands one at a time, not in parallel: the integration tests connect to the real `orders-rabbitmq` broker (only Postgres is containerized per-test via Testcontainers), so two services' suites running at once can cross-deliver real messages mid-test.
+
+### Test Coverage
+
+The exercise requires a minimum of 70% unit test coverage over service logic, domain models, and event handlers. Measured with `coverlet.collector` (already referenced by every `*.Tests.csproj`) plus the [ReportGenerator](https://github.com/danielpalme/ReportGenerator) local tool (`.config/dotnet-tools.json` - run `dotnet tool restore` once, then `dotnet test --collect:"XPlat Code Coverage"` followed by `dotnet reportgenerator -reports:<service>/**/coverage.cobertura.xml -targetdir:coverage-reports/<service> -reporttypes:TextSummary`) and, for the frontend, `@vitest/coverage-v8` (`npm test -- --code-coverage`). Generated code (ASP.NET Core's OpenAPI source generator output, compiler-emitted attribute classes) is excluded from the backend numbers below, since it isn't code this project owns:
+
+| Service | Line coverage | Branch coverage |
+|---|---|---|
+| Order Service | 93% | 83.5% |
+| Payment Service | 90.5% | 84.6% |
+| Inventory Service | 90.6% | 69.3% |
+| API Gateway | 98% | 85% |
+| Frontend (statements) | 78.5% | 70.6% |
+
+All four backend services exceed the 70% minimum by a wide margin on `*.Application`/`*.Domain`/`*.Infrastructure` (the layers the requirement targets); the raw, unfiltered number for each `*.API` project is lower only because it includes generated code and thin `Program.cs` startup wiring, not because business logic is undertested. The frontend has no exercise-mandated percentage (Task 6.1's coverage requirement is stated for the xUnit/NUnit backend suites) but is included for completeness.
 
 ## Project Structure
 
@@ -212,6 +245,8 @@ Run the four backend commands one at a time, not in parallel: the integration te
 ├── docker/                 Implemented (Phase 5): docker-compose.yml, docker-compose.override.yml, prometheus.yml
 ├── docs/
 │   ├── api/                Postman collection per service
+│   ├── adr/                Implemented (Phase 6): Architecture Decision Records
+│   ├── architecture.md     Implemented (Phase 6)
 │   └── technical-exercise.md
 ├── scripts/                Database setup and schema scripts
 ├── CLAUDE.md                Project rules and conventions
@@ -222,4 +257,6 @@ Run the four backend commands one at a time, not in parallel: the integration te
 
 - [`docs/technical-exercise.md`](docs/technical-exercise.md) — full original requirements, business rules, and evaluation criteria.
 - [`CLAUDE.md`](CLAUDE.md) — architecture rules, established patterns, and non-negotiable business rules for anyone contributing to this repository.
+- [`docs/architecture.md`](docs/architecture.md) — components, synchronous/asynchronous flow diagrams, and the order status state machine.
+- [`docs/adr/`](docs/adr/README.md) — Architecture Decision Records (SQL vs NoSQL, Saga pattern, database per service, key technology choices).
 - [`docs/api/`](docs/api/README.md) — Postman collections, one per service.

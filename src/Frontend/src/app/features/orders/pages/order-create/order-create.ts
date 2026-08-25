@@ -131,8 +131,8 @@ export class OrderCreate implements OnInit {
     this.store.dispatch(
       OrdersActions.createOrder({
         request: {
-          // No auth/login exists until Phase 5 (JWT) - a fresh id stands in
-          // for the authenticated user's id until then.
+          // The frontend has no login screen (deliberate scope decision - see
+          // CLAUDE.md), so there is no authenticated user id to attach here.
           customerId: crypto.randomUUID(),
           customerName: value.customerName,
           customerEmail: value.customerEmail,
