@@ -5,6 +5,11 @@ out/
 TestResults/
 coverage-reports/
 
+# Serilog file sink output (local dotnet run/test, and each container's own
+# runtime logs when bind-mounted) - never committed, service name + date
+# in the filename.
+logs/
+
 # Visual Studio / Rider / VS Code
 .vs/
 .vscode/

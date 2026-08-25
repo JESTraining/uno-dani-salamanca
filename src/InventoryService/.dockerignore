@@ -1,8 +1,8 @@
-bin/
-obj/
-out/
-TestResults/
-.vs/
+**/bin/
+**/obj/
+**/out/
+**/TestResults/
+**/.vs/
 .vscode/
 .idea/
 *.user

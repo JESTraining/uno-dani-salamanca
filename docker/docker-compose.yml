@@ -36,6 +36,10 @@ services:
     container_name: orders-seq
     environment:
       ACCEPT_EULA: "Y"
+      # Local/demo environment only (see CLAUDE.md's Security section) - no
+      # sensitive data flows through Seq here, so skip the first-run admin
+      # account Seq now requires by default instead of provisioning one.
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "true"
     ports:
       - "5341:5341"
       - "8081:80"
