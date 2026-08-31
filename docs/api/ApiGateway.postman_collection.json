@@ -1,0 +1,237 @@
+{
+  "info": {
+    "name": "API Gateway",
+    "description": "REST API collection for the API Gateway (Phase 5).\n\nRequirements before using it:\n- Docker containers `orders-postgres` and `orders-rabbitmq` running.\n- Order Service, Payment Service, and Inventory Service all running (see their own collections in this folder).\n- Gateway running: `cd src/ApiGateway/ApiGateway.API && dotnet run --launch-profile http` (listens on http://localhost:5013).\n\nThe Gateway is the only entry point the frontend uses (see CLAUDE.md, 'Non-Negotiable Rules'). It proxies every request to Order/Payment/Inventory Service via YARP, including the SignalR hub's WebSocket traffic at `/hubs/orders`, and is the only place that issues JWTs.\n\nAuthentication: there is no real user/identity system in this project. 'Login (Admin)' and 'Login (Customer)' authenticate against a small hardcoded demo user list (`ApiGateway.API/Services/DemoUserStore.cs`) and return a bearer token. Only one downstream endpoint actually checks the token's role - Inventory Service's `POST /api/v1/products`, restricted to the `Admin` role. Every other proxied endpoint in this collection works with no token at all, matching the frontend, which has no login screen.\n\nCollection variables: `baseUrl` (the Gateway's URL), `adminToken` and `customerToken` (filled in automatically by the two login requests' test scripts), `productId` and `orderId` (filled in automatically the same way as the individual service collections, so requests can be chained without copying ids by hand).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5013", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" },
+    { "key": "customerToken", "value": "", "type": "string" },
+    { "key": "productId", "value": "", "type": "string" },
+    { "key": "orderId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Login (Admin)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "v1", "auth", "login" ]
+        },
+        "description": "Authenticates the demo Admin user and returns a bearer token, valid for 60 minutes. Only this role can call Inventory Service's 'Create Product' (see that collection).",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"Admin123!\"\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('adminToken', body.accessToken);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/auth/login" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"tokenType\": \"Bearer\",\n  \"expiresInMinutes\": 60,\n  \"role\": \"Admin\"\n}"
+        },
+        {
+          "name": "401 Unauthorized (invalid credentials)",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/auth/login" } },
+          "status": "Unauthorized",
+          "code": 401,
+          "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
+          "body": "{\n  \"status\": 401,\n  \"title\": \"Invalid username or password.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Login (Customer)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "v1", "auth", "login" ]
+        },
+        "description": "Authenticates the demo Customer user and returns a bearer token. Included to demonstrate the 403 Forbidden case on Inventory Service's admin-only endpoint (a valid, non-Admin token).",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"customer\",\n  \"password\": \"Customer123!\"\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('customerToken', body.accessToken);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/auth/login" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"tokenType\": \"Bearer\",\n  \"expiresInMinutes\": 60,\n  \"role\": \"Customer\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Create Product (proxied, Admin token)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/products",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "v1", "products" ]
+        },
+        "description": "Proxied to Inventory Service through the Gateway. Requires 'Login (Admin)' to have been run first, filling {{adminToken}}. The Gateway forwards the request as-is; Inventory Service validates the token itself (see InventoryService.postman_collection.json).",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"CAT-GYM-01\",\n  \"name\": \"Cat Tower XL\",\n  \"description\": \"5-level cat gym\",\n  \"unitPrice\": 89.99,\n  \"stockQuantity\": 10\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('productId', body.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "201 Created",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/products" } },
+          "status": "Created",
+          "code": 201,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"sku\": \"CAT-GYM-01\",\n  \"name\": \"Cat Tower XL\",\n  \"description\": \"5-level cat gym\",\n  \"unitPrice\": 89.99,\n  \"stockQuantity\": 10,\n  \"reservedQuantity\": 0,\n  \"availableQuantity\": 10,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:00Z\"\n}"
+        },
+        {
+          "name": "403 Forbidden (Customer token)",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/products" } },
+          "status": "Forbidden",
+          "code": 403,
+          "header": [],
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "Create Order (proxied, no token required)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}",
+            "description": "See OrderService.postman_collection.json for the full explanation of this header."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "v1", "orders" ]
+        },
+        "description": "Proxied to Order Service through the Gateway. No token required - Order Service does not gate this endpoint. Run 'Create Product (proxied, Admin token)' first so the referenced product exists.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerId\": \"{{$guid}}\",\n  \"customerName\": \"Jane Doe\",\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"productName\": \"Cat Tower XL\",\n      \"quantity\": 1,\n      \"unitPrice\": 89.99\n    }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('orderId', body.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "201 Created",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/orders" } },
+          "status": "Created",
+          "code": 201,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"customerId\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n  \"customerName\": \"Jane Doe\",\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"status\": \"Pending\",\n  \"totalAmount\": 89.99,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:00Z\",\n  \"items\": [\n    {\n      \"id\": \"b2c3d4e5-0000-0000-0000-000000000002\",\n      \"productId\": \"c3d4e5f6-0000-0000-0000-000000000003\",\n      \"productName\": \"Cat Tower XL\",\n      \"quantity\": 1,\n      \"unitPrice\": 89.99,\n      \"subtotal\": 89.99\n    }\n  ]\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get Order By Id (proxied)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "v1", "orders", "{{orderId}}" ]
+        },
+        "description": "Proxied to Order Service through the Gateway. Poll this after 'Create Order' to watch the saga progress from Pending through PaymentProcessing/InventoryProcessing to Completed (or a failure branch) - entirely automatic, driven by RabbitMQ events."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"customerId\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n  \"customerName\": \"Jane Doe\",\n  \"customerEmail\": \"jane.doe@example.com\",\n  \"status\": \"Completed\",\n  \"totalAmount\": 89.99,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:08Z\",\n  \"items\": [\n    {\n      \"id\": \"b2c3d4e5-0000-0000-0000-000000000002\",\n      \"productId\": \"c3d4e5f6-0000-0000-0000-000000000003\",\n      \"productName\": \"Cat Tower XL\",\n      \"quantity\": 1,\n      \"unitPrice\": 89.99,\n      \"subtotal\": 89.99\n    }\n  ]\n}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "info": {
+    "name": "Payment Service",
+    "description": "REST API collection for Payment Service (Phase 2).\n\nRequirements before using it:\n- Docker containers `orders-postgres` and `orders-rabbitmq` running.\n- API running: `cd src/PaymentService/PaymentService.API && dotnet run --launch-profile http` (listens on http://localhost:5033).\n\nIn the real saga flow, payment processing is triggered automatically: Payment Service consumes `OrderCreatedEvent` from RabbitMQ (published by Order Service) and processes the payment on its own, with no request needed. 'Process Payment' below calls the same underlying logic directly over HTTP, which is useful for testing the gateway rules in isolation without creating a real order first.\n\nMock gateway rules (see CLAUDE.md, 'Critical Business Rules'): amounts over $10,000 always fail (fraud detection); amounts ending in .99 have a 20% random chance of failing; everything else succeeds. Every attempt takes 2-5 simulated seconds.\n\nIdempotency: a payment is uniquely tied to one order (`orderId`). Processing the same order twice returns the already-existing payment instead of charging again - there is no separate idempotency key header for this service, unlike Order Service's `POST /api/v1/orders`.\n\nCollection variables: `baseUrl` (the API's URL) and `orderId` (filled in automatically when running 'Process Payment' with a response, so 'Get Payment by Order Id' can be run right after without copying the id by hand).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5033", "type": "string" },
+    { "key": "orderId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Process Payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/payments/process",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "v1", "payments", "process" ]
+        },
+        "description": "Processes a payment for an order against the mock gateway. Normally triggered automatically by consuming OrderCreatedEvent; this endpoint runs the same logic directly for manual testing.\n\nTry changing 'amount' to see the three gateway outcomes:\n- Any value over 10000: always fails (fraud detection).\n- A value ending in .99 (e.g. 49.99): fails about 1 in 5 times, randomly.\n- Anything else: succeeds.\n\nThe response is always 200 OK regardless of whether the payment itself succeeded or failed - check the 'status' field in the body. A non-200 response means the request itself was invalid, not that the payment was declined.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"orderId\": \"{{$guid}}\",\n  \"amount\": 150.00,\n  \"paymentMethod\": \"CreditCard\"\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('orderId', body.orderId);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "200 OK (Succeeded)",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/payments/process" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"orderId\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n  \"amount\": 150.00,\n  \"paymentMethod\": \"CreditCard\",\n  \"status\": \"Succeeded\",\n  \"transactionId\": \"b2c3d4e5-0000-0000-0000-000000000002\",\n  \"failureReason\": null,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:04Z\"\n}"
+        },
+        {
+          "name": "200 OK (Failed - amount over $10,000)",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/payments/process" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"orderId\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n  \"amount\": 15000.00,\n  \"paymentMethod\": \"CreditCard\",\n  \"status\": \"Failed\",\n  \"transactionId\": null,\n  \"failureReason\": \"Payment declined: amount exceeds the fraud detection threshold of $10,000.\",\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:03Z\"\n}"
+        },
+        {
+          "name": "400 Bad Request (invalid amount)",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/v1/payments/process" } },
+          "status": "Bad Request",
+          "code": 400,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"title\": \"One or more validation errors occurred.\",\n  \"status\": 400,\n  \"errors\": {\n    \"Amount\": [ \"The field Amount must be between 0.01 and 1.7976931348623157E+308.\" ]\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get Payment by Order Id",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/payments/{{orderId}}",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "v1", "payments", "{{orderId}}" ]
+        },
+        "description": "Returns the payment status for an order. Uses the {{orderId}} collection variable, filled in automatically after running 'Process Payment'. Returns 404 if no payment has been processed for that order yet (including while it is still being processed asynchronously through the saga - poll this endpoint or check the order's status through Order Service instead of assuming an immediate result)."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/v1/payments/{{orderId}}" } },
+          "status": "OK",
+          "code": 200,
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"orderId\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n  \"amount\": 150.00,\n  \"paymentMethod\": \"CreditCard\",\n  \"status\": \"Succeeded\",\n  \"transactionId\": \"b2c3d4e5-0000-0000-0000-000000000002\",\n  \"failureReason\": null,\n  \"createdAt\": \"2026-08-19T18:00:00Z\",\n  \"updatedAt\": \"2026-08-19T18:00:04Z\"\n}"
+        },
+        {
+          "name": "404 Not Found",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/v1/payments/{{orderId}}" } },
+          "status": "Not Found",
+          "code": 404,
+          "header": [],
+          "body": ""
+        }
+      ]
+    }
+  ]
+}

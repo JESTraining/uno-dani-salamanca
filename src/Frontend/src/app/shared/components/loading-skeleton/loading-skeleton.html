@@ -1,0 +1,5 @@
+<div class="skeleton" aria-hidden="true">
+  @for (rowIndex of rowIndexes(); track rowIndex) {
+    <div class="skeleton__row" [style.height]="rowHeight()"></div>
+  }
+</div>

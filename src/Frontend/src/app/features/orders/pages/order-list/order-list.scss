@@ -1,0 +1,37 @@
+.order-list {
+  max-width: 1100px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  &__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  &__table {
+    width: 100%;
+  }
+
+  &__row {
+    cursor: pointer;
+
+    &:hover {
+      background: var(--mat-sys-surface-container-high);
+    }
+  }
+
+  &__empty {
+    text-align: center;
+    color: var(--mat-sys-on-surface-variant);
+    padding: 2rem 0;
+  }
+}
